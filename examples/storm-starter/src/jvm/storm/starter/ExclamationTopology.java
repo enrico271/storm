@@ -70,6 +70,7 @@ public class ExclamationTopology {
     Config conf = new Config();
     conf.setDebug(true);
 
+
     if (args != null && args.length > 0) {
       conf.setNumWorkers(3);
 
