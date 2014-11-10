@@ -41,7 +41,7 @@ public class WordCountTopology {
   public static class SplitSentence extends ShellBolt implements IRichBolt {
 
     public SplitSentence() {
-      super("python", "splitsentence.py");
+      super("python", "/Users/Enrico/UCB/CAPSTONE/storm/examples/storm-starter/multilang/resources/splitsentence.py");
     }
 
     @Override
