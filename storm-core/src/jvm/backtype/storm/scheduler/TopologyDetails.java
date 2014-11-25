@@ -17,9 +17,7 @@
  */
 package backtype.storm.scheduler;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import backtype.storm.Config;
 import backtype.storm.generated.StormTopology;
@@ -71,6 +69,20 @@ public class TopologyDetails {
         return this.executorToComponent;
     }
 
+    public Map<String, List<ExecutorDetails>> getComponentToExecutors() {
+        Map<String, List<ExecutorDetails>> componentToExecutors = new HashMap<String, List<ExecutorDetails>>();
+        for (ExecutorDetails executor : executorToComponent.keySet()) {
+            String component = executorToComponent.get(executor);
+            if (!componentToExecutors.containsKey(component)) {
+                componentToExecutors.put(component, new ArrayList<ExecutorDetails>());
+            }
+
+            componentToExecutors.get(component).add(executor);
+        }
+
+        return componentToExecutors;
+    }
+
     public Map<ExecutorDetails, String> selectExecutorToComponent(Collection<ExecutorDetails> executors) {
         Map<ExecutorDetails, String> ret = new HashMap<ExecutorDetails, String>(executors.size());
         for (ExecutorDetails executor : executors) {
@@ -81,6 +93,21 @@ public class TopologyDetails {
         }
         
         return ret;
+    }
+
+    public Map<String, List<ExecutorDetails>> selectComponentToExecutors(Collection<ExecutorDetails> executors) {
+        Map<String, List<ExecutorDetails>> componentToExecutors = new HashMap<String, List<ExecutorDetails>>();
+        Map<ExecutorDetails, String> selectedExecutorToComponents = selectExecutorToComponent(executors);
+        for (ExecutorDetails executor : selectedExecutorToComponents.keySet()) {
+            String component = selectedExecutorToComponents.get(executor);
+            if (!componentToExecutors.containsKey(component)) {
+                componentToExecutors.put(component, new ArrayList<ExecutorDetails>());
+            }
+
+            componentToExecutors.get(component).add(executor);
+        }
+
+        return componentToExecutors;
     }
     
     public Collection<ExecutorDetails> getExecutors() {
