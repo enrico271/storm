@@ -20,10 +20,13 @@ package storm.starter;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
+import backtype.storm.generated.GlobalStreamId;
+import backtype.storm.grouping.CustomStreamGrouping;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.ShellBolt;
 import backtype.storm.task.TopologyContext;
+import backtype.storm.task.WorkerTopologyContext;
 import backtype.storm.topology.BasicOutputCollector;
 import backtype.storm.topology.IRichBolt;
 import backtype.storm.topology.OutputFieldsDeclarer;
@@ -38,10 +41,8 @@ import backtype.storm.utils.Utils;
 import org.slf4j.LoggerFactory;
 import storm.starter.spout.RandomSentenceSpout;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.io.Serializable;
+import java.util.*;
 
 /**
  * This topology demonstrates Storm's stream groupings and multilang capabilities.
@@ -151,8 +152,10 @@ public class PokemonTopology {
         TopologyBuilder builder = new TopologyBuilder();
 
         builder.setSpout("spout", new RandomPokemonSpout(), 2);
-        builder.setBolt("count", new PokemonCount(), 2).fieldsGrouping("spout", new Fields("word"));
+        //builder.setBolt("count", new PokemonCount(), 2).ksafefieldgrouping("spout", new Fields("word"));
+        builder.setBolt("count", new PokemonCount(), 1).customGrouping("spout", new MyGrouping());
         builder.setBolt("combine", new PokemonCombineCount(), 1).shuffleGrouping("count");
+
 
         Config conf = new Config();
         conf.setDebug(true);
@@ -167,11 +170,38 @@ public class PokemonTopology {
             conf.setMaxTaskParallelism(3);
 
             LocalCluster cluster = new LocalCluster();
-            cluster.submitTopology("special-topology", conf, builder.createTopology());
+            cluster.submitTopology("ksafe", conf, builder.createTopology());
 
             Thread.sleep(10000);
 
             cluster.shutdown();
         }
+    }
+
+
+}
+
+
+class MyGrouping implements CustomStreamGrouping, Serializable {
+    List<Integer> targetTasks = null;
+
+    public List<Integer> chooseTasks(int taskId, List<Object> values) {
+        List<Integer> boltIds = new ArrayList<Integer>();
+        if (values.size() > 0) {
+            String str = values.get(0).toString();
+            if (str.isEmpty())
+                boltIds.add(0);
+            else {
+                char c = str.charAt(0);
+                int size = targetTasks.size();
+                boltIds.add(targetTasks.get(c % size));
+                boltIds.add(targetTasks.get((c+1) % size));
+            }
+        }
+        return boltIds;
+    }
+
+    public void prepare(WorkerTopologyContext context, GlobalStreamId stream, List<Integer> targetTasks) {
+        this.targetTasks = targetTasks;
     }
 }
