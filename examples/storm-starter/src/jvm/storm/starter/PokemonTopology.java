@@ -22,6 +22,7 @@ import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
 import backtype.storm.generated.GlobalStreamId;
 import backtype.storm.grouping.CustomStreamGrouping;
+import backtype.storm.grouping.KSafeFieldGrouping;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.ShellBolt;
@@ -49,6 +50,10 @@ import java.util.*;
  */
 public class PokemonTopology {
 
+    /*
+     * Each task of this spout will output 50 Pokemons
+     * Pokemon = 50% Pikachu and 50% Bulbasaur
+     */
     public static class RandomPokemonSpout extends BaseRichSpout {
         boolean _isDistributed;
         SpoutOutputCollector _collector;
@@ -151,9 +156,8 @@ public class PokemonTopology {
 
         TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout("spout", new RandomPokemonSpout(), 2);
-        //builder.setBolt("count", new PokemonCount(), 2).ksafefieldgrouping("spout", new Fields("word"));
-        builder.setBolt("count", new PokemonCount(), 1).customGrouping("spout", new MyGrouping());
+        builder.setSpout("spout", new RandomPokemonSpout(), 2); // 100 total Pokemons
+        builder.setBolt("count", new PokemonCount(), 4).customGrouping("spout", new KSafeFieldGrouping(2));
         builder.setBolt("combine", new PokemonCombineCount(), 1).shuffleGrouping("count");
 
 
@@ -182,26 +186,3 @@ public class PokemonTopology {
 }
 
 
-class MyGrouping implements CustomStreamGrouping, Serializable {
-    List<Integer> targetTasks = null;
-
-    public List<Integer> chooseTasks(int taskId, List<Object> values) {
-        List<Integer> boltIds = new ArrayList<Integer>();
-        if (values.size() > 0) {
-            String str = values.get(0).toString();
-            if (str.isEmpty())
-                boltIds.add(0);
-            else {
-                char c = str.charAt(0);
-                int size = targetTasks.size();
-                boltIds.add(targetTasks.get(c % size));
-                boltIds.add(targetTasks.get((c+1) % size));
-            }
-        }
-        return boltIds;
-    }
-
-    public void prepare(WorkerTopologyContext context, GlobalStreamId stream, List<Integer> targetTasks) {
-        this.targetTasks = targetTasks;
-    }
-}
