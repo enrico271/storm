@@ -12,7 +12,7 @@ import java.util.HashSet;
 public abstract class DeduplicationBolt extends BaseBasicBolt {
 
 	private HashSet<Object> set = new HashSet<Object>(); // The keys that we've seen so far // TODO: When do we clear this set?
-    private String field; // The field used for dedup key
+	private String field; // The field used for dedup key
 
     /**
      * Public constructor
