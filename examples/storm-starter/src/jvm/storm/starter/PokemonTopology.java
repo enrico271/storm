@@ -111,15 +111,11 @@ public class PokemonTopology {
         }
     }
 
-    public static class PokemonCount extends DeduplicationBolt {
+    public static class PokemonCount extends BaseBasicBolt {
         Map<String, Integer> counts = new HashMap<String, Integer>();
 
-        public PokemonCount(String field) {
-            super(field);
-        }
-
         @Override
-        public void executeImpl(Tuple tuple, BasicOutputCollector collector) {
+        public void execute(Tuple tuple, BasicOutputCollector collector) {
             String word = tuple.getStringByField("word");
             Integer count = counts.get(word);
             if (count == null)
@@ -135,10 +131,10 @@ public class PokemonTopology {
         }
     }
 
-    public static class PokemonCombineCount extends DeduplicationBolt {
+    public static class PokemonCombineCountDedup extends DeduplicationBolt {
         Map<String, Integer> counts = new HashMap<String, Integer>();
 
-        public PokemonCombineCount(String field) {
+        public PokemonCombineCountDedup(String field) {
             super(field);
         }
 
@@ -157,13 +153,32 @@ public class PokemonTopology {
         }
     }
 
+    public static class PokemonCombineCount extends BaseBasicBolt {
+        Map<String, Integer> counts = new HashMap<String, Integer>();
+
+        @Override
+        public void execute(Tuple tuple, BasicOutputCollector collector) {
+            String word = tuple.getStringByField("word");
+            Integer count = tuple.getIntegerByField("count");
+            counts.put(word, count);
+
+            collector.emit(new Values(counts.keySet(), counts.values()));
+        }
+
+        @Override
+        public void declareOutputFields(OutputFieldsDeclarer declarer) {
+            declarer.declare(new Fields("words", "counts"));
+        }
+    }
+
     public static void main(String[] args) throws Exception {
 
         TopologyBuilder builder = new TopologyBuilder();
-        builder.setSpout("spout", new RandomPokemonSpout(), 1); // 50 total Pokemons
+        builder.setSpout("spout", new RandomPokemonSpout(), 1); // 100 total Pokemons
         // TODO: Scheduling: What if #tasks more than #machines?
-        builder.setBolt("count", new PokemonCount("id"), 1).customGrouping("spout", new KSafeFieldGrouping(3));
-        builder.setBolt("combine", new PokemonCombineCount("id"), 1).shuffleGrouping("count");
+        builder.setBolt("count", new PokemonCount(), 2).customGrouping("spout", new KSafeFieldGrouping(1));
+        builder.setBolt("combine", new PokemonCombineCountDedup("id"), 1).shuffleGrouping("count");
+        //builder.setBolt("combine", new PokemonCombineCount(), 1).shuffleGrouping("count");
         /*
          * Note: the correct output should be [[bulbasaur, pikachu], [x,y]] where x + y = 50
          */
