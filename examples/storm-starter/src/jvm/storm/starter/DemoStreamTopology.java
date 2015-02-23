@@ -24,8 +24,9 @@ import backtype.storm.grouping.KSafeFieldGrouping;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
-import backtype.storm.topology.*;
-import backtype.storm.topology.base.BaseBasicBolt;
+import backtype.storm.topology.DeduplicationBolt;
+import backtype.storm.topology.OutputFieldsDeclarer;
+import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.topology.base.BaseRichSpout;
 import backtype.storm.tuple.Fields;
@@ -33,49 +34,30 @@ import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
 
-import java.io.PrintWriter;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * This topology demonstrates Storm's stream groupings and multilang capabilities.
  */
-public class DemoTopology {
+public class DemoStreamTopology {
 
-    public static void printTuplesToFile(List<Tuple> tuples) {
+    private static final int PRINT_INTERVAL = 5000;
 
-        try {
-            PrintWriter writer = new PrintWriter("storm-output.txt", "UTF-8");
-
-            DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-            Date date = new Date();
-            writer.println(dateFormat.format(date));
-
-            for (Tuple t : tuples)
-                writer.println(t.getValues().toString());
-
-            writer.close();
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
-    }
-
-    public static class SimpleSpout extends BaseRichSpout {
+    public static class ContinuousStreamSpout extends BaseRichSpout {
         SpoutOutputCollector _collector;
         private int count = 0;
-        private ArrayList<Values> values;
+        private ArrayList<String> names;
 
-        public SimpleSpout ()
+        public ContinuousStreamSpout()
         {
-            values = new ArrayList<Values>();
-            values.add(new Values("A", 1));
-            values.add(new Values("B", 2));
-            values.add(new Values("C", 3));
-            values.add(new Values("D", 4));
-            values.add(new Values("E", 5));
+            names = new ArrayList<String>();
+            names.add("A");
+            names.add("B");
+            names.add("C");
+            names.add("D");
+            names.add("E");
         }
 
 
@@ -88,14 +70,15 @@ public class DemoTopology {
 
             Utils.sleep(100);
 
-            if (count < values.size())
-                _collector.emit(values.get(count));
-            count++;
+            for (String s : names) {
+                _collector.emit(new Values(count, s, 1));
+                count++;
+            }
         }
 
 
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "value"));
+            declarer.declare(new Fields("id", "name", "value"));
         }
 
     }
@@ -108,7 +91,7 @@ public class DemoTopology {
 
         @Override
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "value"));
+            declarer.declare(new Fields("id", "name", "value"));
         }
 
         @Override
@@ -120,12 +103,11 @@ public class DemoTopology {
         @Override
         public void execute(Tuple input) {
             if (_taskIndex < _deadTasks) {
-                System.out.println("Ignoring tuple: " + input.toString());
                 return;
             }
 
             int v = input.getIntegerByField("value");
-            _collector.emit(new Values(input.getStringByField("id"), v * 2));
+            _collector.emit(new Values(input.getIntegerByField("id"), input.getStringByField("name"), v * 2));
         }
 
 
@@ -135,50 +117,96 @@ public class DemoTopology {
     }
 
     public static class DedupBolt extends DeduplicationBolt {
-        ArrayList<Tuple> arr = new ArrayList<Tuple>();
 
-        public DedupBolt(String field) {
-            super(field);
+        private HashMap<String,Integer> map = new HashMap<String,Integer>();
+
+        public DedupBolt() {
+            super("id");
         }
 
         @Override
-        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {}
+        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+
+            new Thread() {
+                @Override
+                public void run(){
+                    System.out.println("Thread started");
+                    while (true)
+                    {
+                        Utils.sleep(PRINT_INTERVAL);
+                        System.out.println("------------------------");
+                        for (String s : map.keySet())
+                            System.out.println(s + ": " + map.get(s));
+                        map.clear();
+                        clearKeys();
+                    }
+
+                }
+            }.start();
+        }
+
 
         @Override
         public void executeImpl(Tuple tuple) {
-            arr.add(tuple);
+
+            String name = tuple.getStringByField("name");
+            Integer value = tuple.getIntegerByField("value");
+
+            if (map.containsKey(name))
+                map.put(name, map.get(name) + value);
+            else
+                map.put(name, value);
         }
 
         @Override
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "value", "final"));
+            declarer.declare(new Fields("id")); // unused
         }
 
-        @Override
-        public void cleanup() {
-            super.cleanup();
-            printTuplesToFile(arr);
-        }
     }
 
-    public static class RegularBolt extends BaseBasicBolt {
-        ArrayList<Tuple> arr = new ArrayList<Tuple>();
+    public static class RegularBolt extends BaseRichBolt {
+
+        private HashMap<String,Integer> map = new HashMap<String,Integer>();
 
         @Override
-        public void execute(Tuple tuple, BasicOutputCollector collector) {
-            arr.add(tuple);
+        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+
+            new Thread() {
+                @Override
+                public void run(){
+                    System.out.println("Thread started");
+                    while (true)
+                    {
+                        Utils.sleep(PRINT_INTERVAL);
+                        System.out.println("------------------------");
+                        for (String s : map.keySet())
+                            System.out.println(s + ": " + map.get(s));
+                        map.clear();
+                    }
+
+                }
+            }.start();
+        }
+
+
+        @Override
+        public void execute(Tuple tuple) {
+
+            String name = tuple.getStringByField("name");
+            Integer value = tuple.getIntegerByField("value");
+
+            if (map.containsKey(name))
+                map.put(name, map.get(name) + value);
+            else
+                map.put(name, value);
         }
 
         @Override
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "value", "final"));
+            declarer.declare(new Fields("id")); // unused
         }
 
-        @Override
-        public void cleanup() {
-            super.cleanup();
-            printTuplesToFile(arr);
-        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -188,13 +216,13 @@ public class DemoTopology {
         /*
          * Spout
          */
-        builder.setSpout("spout", new SimpleSpout(), 1);
+        builder.setSpout("spout", new ContinuousStreamSpout(), 1);
 
         /*
          * First bolt
          */
         DoublingBolt bolt1 = new DoublingBolt();
-        bolt1.setDeadTasks(0);
+        bolt1.setDeadTasks(1);
         builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(1));
 
         /*
@@ -202,14 +230,14 @@ public class DemoTopology {
          */
         final boolean DEDUP = true;
         if (DEDUP)
-            builder.setBolt("bolt2", new DedupBolt("id"), 1).allGrouping("bolt1");
+            builder.setBolt("bolt2", new DedupBolt(), 1).allGrouping("bolt1");
         else
             builder.setBolt("bolt2", new RegularBolt(), 1).allGrouping("bolt1");
 
 
 
         Config conf = new Config();
-        conf.put(Config.TOPOLOGY_DEBUG, true);
+        conf.put(Config.TOPOLOGY_DEBUG, false);
 
 
         if (args != null && args.length > 0) {
@@ -223,9 +251,6 @@ public class DemoTopology {
             LocalCluster cluster = new LocalCluster();
             cluster.submitTopology("ksafe", conf, builder.createTopology());
 
-            Thread.sleep(5000);
-
-            cluster.shutdown();
         }
     }
 

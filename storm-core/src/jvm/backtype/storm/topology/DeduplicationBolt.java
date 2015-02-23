@@ -1,18 +1,23 @@
 package backtype.storm.topology;
 
+import backtype.storm.task.OutputCollector;
+import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.base.BaseBasicBolt;
+import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 
 import java.util.HashSet;
+import java.util.Map;
 
 /**
  * Created by Enrico on 12/6/14.
  */
-public abstract class DeduplicationBolt extends BaseBasicBolt {
+public abstract class DeduplicationBolt extends BaseRichBolt {
 
-	private HashSet<Object> set = new HashSet<Object>(); // The keys that we've seen so far // TODO: When do we clear this set?
+    private HashSet<Object> set = new HashSet<Object>(); // The keys that we've seen so far // TODO: When do we clear this set?
 	private String field; // The field used for dedup key
+
 
     /**
      * Public constructor
@@ -31,12 +36,12 @@ public abstract class DeduplicationBolt extends BaseBasicBolt {
      * This method removes duplicates by using one of the values in the Tuple as a key.
      */
     @Override
-    public final void execute(Tuple input, BasicOutputCollector collector)
+    public final void execute(Tuple input)
     {
     	Object key = input.getValueByField(field);
         if (!set.contains(key)) {
             set.add(key);
-            executeImpl(input, collector);
+            executeImpl(input);
         }
     }
 
@@ -45,5 +50,14 @@ public abstract class DeduplicationBolt extends BaseBasicBolt {
      * tuples have been de-duplicated using the field that you declared when
      * constructing this class.
      */
-    protected abstract void executeImpl(Tuple input, BasicOutputCollector collector);
+    protected abstract void executeImpl(Tuple input);
+
+    /**
+     * Clears all keys in our hash set
+     */
+    public void clearKeys()
+    {
+        set.clear();
+    }
+
 }

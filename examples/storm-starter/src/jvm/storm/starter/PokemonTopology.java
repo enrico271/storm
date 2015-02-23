@@ -132,19 +132,26 @@ public class PokemonTopology {
     }
 
     public static class PokemonCombineCountDedup extends DeduplicationBolt {
-        Map<String, Integer> counts = new HashMap<String, Integer>();
+
+        private OutputCollector _collector;
+        private Map<String, Integer> counts = new HashMap<String, Integer>();
 
         public PokemonCombineCountDedup(String field) {
             super(field);
         }
 
         @Override
-        public void executeImpl(Tuple tuple, BasicOutputCollector collector) {
+        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+            _collector = collector;
+        }
+
+        @Override
+        public void executeImpl(Tuple tuple) {
             String word = tuple.getStringByField("word");
             Integer count = tuple.getIntegerByField("count");
             counts.put(word, count);
 
-            collector.emit(new Values(counts.keySet(), counts.values()));
+            _collector.emit(new Values(counts.keySet(), counts.values()));
         }
 
         @Override
