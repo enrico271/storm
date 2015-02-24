@@ -121,7 +121,7 @@ public class MyScheduler implements IScheduler {
     private Map<String, List<SupervisorDetails>> getComponentToAssignedSupervisors(Cluster cluster, SchedulerAssignment currentAssignment, TopologyDetails topology){
 
         Map<String, List<SupervisorDetails>> componentToSupervisors = new HashMap<String, List<SupervisorDetails>>();
-        Map<String, List<ExecutorDetails>> componentToExecutors = topology.getComponentToExecutors();
+        Map<String, List<ExecutorDetails>> componentToExecutors = getComponentToExecutors(topology);
         //initialize map
         for(String component: componentToExecutors.keySet()){
             componentToSupervisors.put(component, new ArrayList<SupervisorDetails>());
@@ -143,5 +143,19 @@ public class MyScheduler implements IScheduler {
         }
 
         return componentToSupervisors;
+    }
+
+    public Map<String, List<ExecutorDetails>> getComponentToExecutors(TopologyDetails topology) {
+        Map<String, List<ExecutorDetails>> componentToExecutors = new HashMap<String, List<ExecutorDetails>>();
+        for (ExecutorDetails executor : topology.getExecutorToComponent().keySet()) {
+            String component = topology.getExecutorToComponent().get(executor);
+            if (!componentToExecutors.containsKey(component)) {
+                componentToExecutors.put(component, new ArrayList<ExecutorDetails>());
+            }
+
+            componentToExecutors.get(component).add(executor);
+        }
+
+        return componentToExecutors;
     }
 }
