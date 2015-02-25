@@ -1,2 +1,0 @@
-# tell nimbus to use this custom scheduler
-storm.scheduler: "storm.MyScheduler"

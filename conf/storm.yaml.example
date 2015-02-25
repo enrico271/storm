@@ -14,6 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+#storm.local.dir: "/tmp/storm"
+#storm.zookeeper.servers:
+#  - “storm00”
+#nimbus.host: “storm00”
+
+storm.zookeeper.servers:
+    - "storm00"
+
+nimbus.host: "storm00"
+nimbus.childopts: "-Xmx1024m -Djava.net.preferIPv4Stack=true"
+
+ui.childopts: "-Xmx768m -Djava.net.preferIPv4Stack=true"
+
+supervisor.childopts: "-Djava.net.preferIPv4Stack=true"
+worker.childopts: "-Xmx768m -Djava.net.preferIPv4Stack=true"
+
+storm.local.dir: "/tmp/storm"
+
 ########### These MUST be filled in for a storm configuration
 # storm.zookeeper.servers:
 #     - "server1"

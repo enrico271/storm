@@ -13,13 +13,23 @@ import backtype.storm.scheduler.WorkerSlot;
 
 public class MyScheduler implements IScheduler {
 
+    private static org.apache.log4j.Logger LOG;
+
     private Random random = new Random();
 
     public void prepare(Map conf) {}
 
+    public MyScheduler()
+    {
+        super();
+        LOG = org.apache.log4j.Logger.getLogger(MyScheduler.class);
+        LOG.info("Hello MyScheduler!");
+    }
+
+
     public void schedule(Topologies topologies, Cluster cluster) {
 
-        System.out.println("************** WELCOME TO MyScheduler **************");
+        LOG.info("************** WELCOME TO MyScheduler **************");
 
         for (TopologyDetails t : topologies.getTopologies())
             scheduleATopology(t, cluster);
