@@ -185,6 +185,9 @@ public class DemoTopology {
 
     public static void main(String[] args) throws Exception {
 
+        org.apache.log4j.Logger LOG = org.apache.log4j.Logger.getLogger(DemoTopology.class);
+        LOG.info("Hello world");
+
         TopologyBuilder builder = new TopologyBuilder();
 
         /*
@@ -208,9 +211,6 @@ public class DemoTopology {
         else
             builder.setBolt("bolt2", new RegularBolt(), 1).allGrouping("bolt1");
 
-
-        org.apache.log4j.Logger LOG = org.apache.log4j.Logger.getLogger(DemoTopology.class);
-        LOG.info("Hello world");
 
         Config conf = new Config();
         conf.put(Config.TOPOLOGY_DEBUG, true);

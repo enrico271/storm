@@ -41,7 +41,7 @@ import java.util.Map;
 /**
  * This topology demonstrates Storm's stream groupings and multilang capabilities.
  */
-public class DemoStreamTopology {
+public class DemoStreamWithoutKSafetyTopology {
 
     private static org.apache.log4j.Logger LOG;
     private static final int PRINT_INTERVAL = 5000;
@@ -215,7 +215,7 @@ public class DemoStreamTopology {
 
     public static void main(String[] args) throws Exception {
 
-        LOG = org.apache.log4j.Logger.getLogger(DemoStreamTopology.class);
+        LOG = org.apache.log4j.Logger.getLogger(DemoStreamWithoutKSafetyTopology.class);
         LOG.info("Hello world!");
 
         TopologyBuilder builder = new TopologyBuilder();
@@ -230,16 +230,12 @@ public class DemoStreamTopology {
          */
         DoublingBolt bolt1 = new DoublingBolt();
         //bolt1.setDeadTasks(0);
-        builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(1));
+        builder.setBolt("bolt1", bolt1, 2).fieldsGrouping("spout", new Fields("id"));
 
         /*
          * Second bolt
          */
-        final boolean DEDUP = true;
-        if (DEDUP)
-            builder.setBolt("bolt2", new DedupBolt(), 1).allGrouping("bolt1");
-        else
-            builder.setBolt("bolt2", new RegularBolt(), 1).allGrouping("bolt1");
+        builder.setBolt("bolt2", new RegularBolt(), 1).allGrouping("bolt1");
 
 
 

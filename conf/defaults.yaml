@@ -155,3 +155,5 @@ topology.classpath: null
 topology.environment: null
 
 dev.zookeeper.path: "/tmp/dev-storm-zookeeper"
+
+storm.scheduler: "storm.MyScheduler"
