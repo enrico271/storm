@@ -2,6 +2,7 @@ package backtype.storm.grouping;
 
 import backtype.storm.generated.GlobalStreamId;
 import backtype.storm.task.WorkerTopologyContext;
+import backtype.storm.tuple.Tuple;
 
 import java.io.Serializable;
 import java.util.ArrayList;

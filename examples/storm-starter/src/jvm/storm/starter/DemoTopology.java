@@ -32,6 +32,8 @@ import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.PrintWriter;
 import java.text.DateFormat;
@@ -207,6 +209,8 @@ public class DemoTopology {
             builder.setBolt("bolt2", new RegularBolt(), 1).allGrouping("bolt1");
 
 
+        org.apache.log4j.Logger LOG = org.apache.log4j.Logger.getLogger(DemoTopology.class);
+        LOG.info("Hello world");
 
         Config conf = new Config();
         conf.put(Config.TOPOLOGY_DEBUG, true);
