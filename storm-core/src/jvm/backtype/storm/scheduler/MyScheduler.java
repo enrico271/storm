@@ -29,7 +29,7 @@ public class MyScheduler implements IScheduler {
 
     public void schedule(Topologies topologies, Cluster cluster) {
 
-        LOG.info("************** WELCOME TO MyScheduler **************");
+        LOG.info("************** YOU ARE NOT WELCOME TO MyScheduler **************");
 
         for (TopologyDetails t : topologies.getTopologies())
             scheduleATopology(t, cluster);
@@ -43,12 +43,12 @@ public class MyScheduler implements IScheduler {
         if (topology == null)
             return;
 
-        System.out.println("PRINTING CURRENT ASSIGNMENTS");
+        LOG.info("PRINTING CURRENT ASSIGNMENTS");
         SchedulerAssignment currentAssignment = cluster.getAssignmentById(topology.getId());
         if (currentAssignment != null)
-            System.out.println("Current assignments: " + currentAssignment.getExecutorToSlot());
+            LOG.info("Current assignments: " + currentAssignment.getExecutorToSlot());
         else
-            System.out.println("Current assignments: {}");
+            LOG.info("Current assignments: {}");
 
         if (!cluster.needsScheduling(topology)) {
             System.out.println("Topology " + topology.getName() + " does not need scheduling");
@@ -58,7 +58,7 @@ public class MyScheduler implements IScheduler {
         // find out all the needs-scheduling components of this topology
         Map<String, List<ExecutorDetails>> needsSchedulingComponentToExecutors = cluster.getNeedsSchedulingComponentToExecutors(topology);
 
-        System.out.println("Needs scheduling(component->executor): " + needsSchedulingComponentToExecutors);
+        LOG.info("Needs scheduling(component->executor): " + needsSchedulingComponentToExecutors);
         System.out.println("Needs scheduling(executor->compoenents): " + cluster.getNeedsSchedulingExecutorToComponents(topology));
 
         // List of supervisors
@@ -100,7 +100,7 @@ public class MyScheduler implements IScheduler {
 
                     // if there is no available slots on this supervisor, free some.
                     if (availableSlots.isEmpty() && !executors.isEmpty()) {
-                        System.out.println("Freeing all slots");
+                        LOG.info("Freeing all slots for a supervisor");
                         for (Integer port : cluster.getUsedPorts(supervisor)) {
                             cluster.freeSlot(new WorkerSlot(supervisor.getId(), port));
                         }
@@ -115,10 +115,10 @@ public class MyScheduler implements IScheduler {
 
                     cluster.assign(availableSlots.get(rand), topology.getId(), executorToAssign);
                     unusedSupervisors.remove(supervisor);
-                    System.out.println("We assigned executor:" + executor + " to slot: [" + availableSlots.get(rand).getNodeId() + ", " + availableSlots.get(rand).getPort() + "]");
+                    LOG.info("We assigned executor:" + executor + " to slot: [" + availableSlots.get(rand).getNodeId() + ", " + availableSlots.get(rand).getPort() + "]");
                 }
                 else{
-                    System.out.println("There are no remaining supervisors to assign this task: " + executor);
+                    LOG.info("There are no remaining supervisors to assign this task: " + executor);
                 }
             }
         }
