@@ -29,7 +29,7 @@ public class MyScheduler implements IScheduler {
 
     public void schedule(Topologies topologies, Cluster cluster) {
 
-        LOG.info("************** YOU ARE NOT WELCOME TO MyScheduler **************");
+        LOG.info("**************WELCOME TO MyScheduler **************");
 
         for (TopologyDetails t : topologies.getTopologies())
             scheduleATopology(t, cluster);
