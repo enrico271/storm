@@ -3,7 +3,7 @@
   <parent>
     <artifactId>storm</artifactId>
     <groupId>org.apache.storm</groupId>
-    <version>0.9.3-rc2-SNAPSHOT</version>
+    <version>0.10.0-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.storm</groupId>
@@ -22,6 +22,19 @@
         <directory>../</directory>
         <includes>
           <include>NOTICE</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>${basedir}/src/resources</directory>
+        <excludes>
+          <exclude>storm-core-version-info.properties</exclude>
+        </excludes>
+      </resource>
+      <resource>
+        <filtering>true</filtering>
+        <directory>${basedir}/src/resources</directory>
+        <includes>
+          <include>storm-core-version-info.properties</include>
         </includes>
       </resource>
     </resources>
@@ -53,7 +66,7 @@
               <goal>test-with-junit</goal>
             </goals>
             <configuration>
-              <vmargs>${test.extra.args}</vmargs>
+              <vmargs>${argLine} ${test.extra.args}</vmargs>
             </configuration>
           </execution>
         </executions>
@@ -126,6 +139,10 @@
               <shadedPattern>org.apache.storm.guava</shadedPattern>
             </relocation>
             <relocation>
+              <pattern>com.google.thirdparty</pattern>
+              <shadedPattern>org.apache.storm.guava.thirdparty</shadedPattern>
+            </relocation>
+            <relocation>
               <pattern>org.apache.http</pattern>
               <shadedPattern>org.apache.storm.http</shadedPattern>
             </relocation>
@@ -173,25 +190,232 @@
           </filters>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.apache.storm</groupId>
+        <artifactId>storm-maven-plugins</artifactId>
+        <executions>
+          <execution>
+            <id>version-info</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>version-info</goal>
+            </goals>
+            <configuration>
+              <source>
+                <directory>${basedir}/src/</directory>
+                <includes>
+                  <include>jvm/**/*.java</include>
+                  <include>clj/**/*.clj</include>
+                </includes>
+              </source>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>2.8</version>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+              <includeScope>runtime</includeScope>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>2.2.1</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>coverage</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>1.7</version>
+            <executions>
+              <execution>
+                <id>add-source</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/clj</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>1.7</version>
+            <executions>
+              <execution>
+                <id>pre-test-jacoco-clean</id>
+                <phase>process-test-classes</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <tasks>
+                    <delete />
+                  </tasks>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>0.7.2.201409121644</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+                <configuration>
+                  <append>true</append>
+                  <excludes>
+                    <exclude>backtype/storm/metric/api/IMetricsConsumer$DataPointFieldAccess</exclude>
+                    <exclude>backtype/storm/metric/api/IMetricsConsumer$TaskInfoFieldAccess</exclude>
+                    <exclude>backtype/storm/testing/TestSerObjectFieldAccess</exclude>
+                  </excludes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>prepare-package</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+                <configuration>
+                  <excludes>
+                    <exclude>backtype/storm/generated/*</exclude>
+                  </excludes>
+                  <includes>
+                    <include>backtype/*/*/*/*</include>
+                    <include>backtype/*/*/*</include>
+                    <include>backtype/*/*</include>
+                    <include>backtype/*</include>
+                    <include>zilch/*</include>
+                    <include>storm/*/*/*/*</include>
+                    <include>storm/*/*/*</include>
+                    <include>storm/*/*</include>
+                    <include>storm/*</include>
+                  </includes>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>native</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>1.2.1</version>
+            <executions>
+              <execution>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <executable>sh</executable>
+              <arguments>
+                <argument>-c</argument>
+                <argument>mkdir -p ${project.build.directory}/; cp -rufv ${basedir}/src/native/ ${project.build.directory}/</argument>
+              </arguments>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>make-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>compile</id>
+                <phase>compile</phase>
+                <goals>
+                  <goal>autoreconf</goal>
+                  <goal>configure</goal>
+                  <goal>make-install</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>test</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <workDir>${project.build.directory}/native/worker-launcher</workDir>
+              <arguments>
+                <argument>-i</argument>
+              </arguments>
+              <configureEnvironment>
+                <property>
+                  <name>CFLAGS</name>
+                  <value>-DEXEC_CONF_DIR=${worker-launcher.conf.dir} ${worker-launcher.additional_cflags}</value>
+                </property>
+              </configureEnvironment>
+              <configureWorkDir>${project.build.directory}/native/worker-launcher</configureWorkDir>
+              <prefix>/usr/local</prefix>
+              <destDir>${project.build.directory}/native/target</destDir>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
   <dependencies>
     <dependency>
       <groupId>org.clojure</groupId>
       <artifactId>clojure</artifactId>
-      <version>1.5.1</version>
+      <version>1.6.0</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>clj-time</groupId>
       <artifactId>clj-time</artifactId>
-      <version>0.4.1</version>
+      <version>0.8.0</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>joda-time</groupId>
       <artifactId>joda-time</artifactId>
-      <version>2.0</version>
+      <version>2.3</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -245,43 +469,151 @@
     <dependency>
       <groupId>ring</groupId>
       <artifactId>ring-devel</artifactId>
-      <version>0.3.11</version>
+      <version>1.3.0</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>clj-stacktrace</groupId>
       <artifactId>clj-stacktrace</artifactId>
+      <version>0.2.7</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>ns-tracker</groupId>
+      <artifactId>ns-tracker</artifactId>
+      <version>0.2.2</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.clojure</groupId>
+      <artifactId>tools.namespace</artifactId>
+      <version>0.2.4</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.clojure</groupId>
+      <artifactId>java.classpath</artifactId>
       <version>0.2.2</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>ring</groupId>
       <artifactId>ring-jetty-adapter</artifactId>
-      <version>0.3.11</version>
+      <version>1.3.0</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>ring</groupId>
       <artifactId>ring-servlet</artifactId>
-      <version>0.3.11</version>
+      <version>1.3.0</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>org.mortbay.jetty</groupId>
-      <artifactId>jetty</artifactId>
-      <version>6.1.26</version>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-server</artifactId>
+      <version>7.6.13.v20130916</version>
       <scope>compile</scope>
-      <exclusions>
-        <exclusion>
-          <artifactId>servlet-api</artifactId>
-          <groupId>org.mortbay.jetty</groupId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.mortbay.jetty</groupId>
+      <groupId>org.eclipse.jetty.orbit</groupId>
+      <artifactId>javax.servlet</artifactId>
+      <version>2.5.0.v201103041518</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-http</artifactId>
+      <version>7.6.13.v20130916</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-io</artifactId>
+      <version>7.6.13.v20130916</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>ring</groupId>
+      <artifactId>ring-anti-forgery</artifactId>
+      <version>1.0.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>crypto-random</groupId>
+      <artifactId>crypto-random</artifactId>
+      <version>1.2.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>crypto-equality</groupId>
+      <artifactId>crypto-equality</artifactId>
+      <version>1.0.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>ring</groupId>
+      <artifactId>ring-json</artifactId>
+      <version>0.3.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>cheshire</groupId>
+      <artifactId>cheshire</artifactId>
+      <version>5.3.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+      <version>2.3.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-smile</artifactId>
+      <version>2.3.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>tigris</groupId>
+      <artifactId>tigris</artifactId>
+      <version>0.1.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+      <version>7.6.13.v20130916</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-security</artifactId>
+      <version>7.6.13.v20130916</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlets</artifactId>
+      <version>7.6.13.v20130916</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-continuation</artifactId>
+      <version>7.6.13.v20130916</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-client</artifactId>
+      <version>7.6.13.v20130916</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-util</artifactId>
-      <version>6.1.26</version>
+      <version>7.6.13.v20130916</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -388,9 +720,9 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
-      <groupId>com.lmax</groupId>
+      <groupId>com.googlecode.disruptor</groupId>
       <artifactId>disruptor</artifactId>
-      <version>3.2.1</version>
+      <version>2.10.1</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -424,11 +756,30 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-auth</artifactId>
+      <version>2.4.0</version>
+      <scope>compile</scope>
+      <exclusions>
+        <exclusion>
+          <artifactId>log4j</artifactId>
+          <groupId>log4j</groupId>
+        </exclusion>
+        <exclusion>
+          <artifactId>slf4j-log4j12</artifactId>
+          <groupId>org.slf4j</groupId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
       <groupId>jline</groupId>
       <artifactId>jline</artifactId>
       <version>2.11</version>
       <scope>compile</scope>
     </dependency>
   </dependencies>
+  <properties>
+    <worker-launcher.conf.dir>/etc/storm</worker-launcher.conf.dir>
+  </properties>
 </project>
 
