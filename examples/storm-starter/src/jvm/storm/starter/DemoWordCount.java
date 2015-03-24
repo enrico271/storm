@@ -46,11 +46,13 @@ public class DemoWordCount {
     private static org.apache.log4j.Logger LOG;
     private static final int TYPE_WORD = 0;
     private static final int TYPE_EOF = 1;
+    private static final int TYPE_MARK = 2;
 
     public static class WordSpout extends BaseRichSpout {
         SpoutOutputCollector _collector;
         private String _text = null;
         private Scanner _scan = null;
+        private boolean markSent = false;
 
 
         @Override
@@ -75,13 +77,20 @@ public class DemoWordCount {
 
             Utils.sleep(100);
 
-            if (_scan.hasNext())
+            if (!markSent) {
+                // WARNING: This is a hack to send EOF to both tasks
+                _collector.emit(new Values("a", System.currentTimeMillis(), TYPE_MARK));
+                _collector.emit(new Values("b", System.currentTimeMillis(), TYPE_MARK));
+                markSent = true;
+            }
+            else if (_scan.hasNext())
                 _collector.emit(new Values(_scan.next(), System.currentTimeMillis(), TYPE_WORD));
             else {
                 // WARNING: This is a hack to send EOF to both tasks
                 _collector.emit(new Values("a", System.currentTimeMillis(), TYPE_EOF));
                 _collector.emit(new Values("b", System.currentTimeMillis(), TYPE_EOF));
                 _scan = new Scanner(_text);
+                markSent = false;
             }
         }
 
@@ -100,6 +109,8 @@ public class DemoWordCount {
 
         private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
         private Long _minTime = null;
+
+        private boolean marked = false;
 
         @Override
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
@@ -135,9 +146,16 @@ public class DemoWordCount {
                     break;
 
                 case TYPE_EOF:
-                    _collector.emit( new Values(_minTime, _countMap, _taskIndex));
-                    _countMap = new HashMap<String, Integer>();
+                    if (marked) {
+                        _collector.emit(new Values(_minTime, _countMap, _taskIndex));
+                        _countMap = new HashMap<String, Integer>();
+                    }
                     _minTime = null;
+                    marked = false;
+                    break;
+
+                case TYPE_MARK:
+                    marked = true;
                     break;
 
                 default:
