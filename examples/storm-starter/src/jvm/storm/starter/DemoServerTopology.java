@@ -36,6 +36,11 @@ import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -44,30 +49,78 @@ import java.util.Map;
  */
 public class DemoServerTopology {
 
+    private static ServerSocket listener;
+    private static int delay = 100;
+    private static int size = 1024;
+
+    public static void startServer() {
+
+        System.out.println("Starting server");
+
+        try {
+
+            listener = new ServerSocket(2727);
+            while (true)
+                new Connection(listener.accept()).start();
+
+
+        } catch (IOException e) { e.printStackTrace(); }
+        finally {
+            try {
+                listener.close();
+            } catch (IOException e) {}
+        }
+
+    }
+
+    private static class Connection extends Thread {
+        private Socket socket;
+
+        public Connection(Socket socket) {
+            System.out.println("New connection: " + socket.toString());
+            this.socket = socket;
+        }
+
+        public void run() {
+
+            try {
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                String msg;
+                while ((msg = in.readLine()) != null) {
+                    delay = Integer.parseInt(msg);
+                }
+            }
+            catch (IOException e) { e.printStackTrace(); }
+            finally {
+                System.out.println("Closing connection: " + socket.toString());
+                try { socket.close(); } catch (IOException e) {e.printStackTrace();}
+            }
+        }
+    }
+
 
     public static class ServerSpout extends BaseRichSpout {
         SpoutOutputCollector _collector;
         private int count = 0;
 
-        public ServerSpout()
-        {
+
+        public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
+            _collector = collector;
+
             new Thread() {
                 @Override
                 public void run(){
-                    DemoServer.startServer();
+                    startServer();
                 }
             }.start();
         }
 
 
-        public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
-            _collector = collector;
-        }
-
-
         public void nextTuple() {
 
-            //_collector.emit(new Values(count++));
+            Utils.sleep(delay);
+            _collector.emit(new Values(count++, "Hello. Hello. Hello."));
+            System.out.println("Current delay is " + delay);
         }
 
 
@@ -77,76 +130,68 @@ public class DemoServerTopology {
 
     }
 
-    public static class DoublingBolt extends BaseRichBolt {
+    public static class DummyBolt extends BaseRichBolt {
 
         OutputCollector _collector;
-        int _deadTasks = 0;
-        int _taskIndex;
 
         @Override
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "value"));
+            declarer.declare(new Fields("id", "msg"));
         }
 
         @Override
         public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
             _collector = collector;
-            _taskIndex = context.getThisTaskIndex();
         }
 
         @Override
         public void execute(Tuple input) {
-            if (_taskIndex < _deadTasks) {
-                System.out.println("Ignoring tuple: " + input.toString());
-                return;
-            }
 
-            int v = input.getIntegerByField("value");
-            _collector.emit(new Values(input.getStringByField("id"), v * 2));
-        }
-
-
-        public void setDeadTasks(int n) {
-            _deadTasks = n;
+            _collector.emit(new Values(input.getIntegerByField("id"), input.getStringByField("msg")));
         }
     }
 
     public static class DedupBolt extends DeduplicationBolt {
-        ArrayList<Tuple> arr = new ArrayList<Tuple>();
 
-        public DedupBolt(String field) {
-            super(field);
+        private int tuplesReceived = 0;
+        private long lastPrint = 0;
+
+        public DedupBolt() {
+            super("id");
         }
 
         @Override
-        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {}
+        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+
+            lastPrint = System.currentTimeMillis();
+
+            new Thread() {
+                @Override
+                public void run()
+                {
+                    while (true) {
+                        if (System.currentTimeMillis() - lastPrint >= 1000) {
+                            System.out.println("Throughput: " + tuplesReceived + " tuples/sec");
+                            lastPrint = System.currentTimeMillis();
+                            tuplesReceived = 0;
+                        }
+                    }
+                }
+            }.start();
+        }
 
         @Override
         public void executeImpl(Tuple tuple) {
-            arr.add(tuple);
+            tuplesReceived++;
         }
 
         @Override
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "value", "final"));
+            declarer.declare(new Fields("id"));
         }
 
     }
 
-    public static class RegularBolt extends BaseBasicBolt {
-        ArrayList<Tuple> arr = new ArrayList<Tuple>();
-
-        @Override
-        public void execute(Tuple tuple, BasicOutputCollector collector) {
-            arr.add(tuple);
-        }
-
-        @Override
-        public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "value", "final"));
-        }
-
-    }
 
     public static void main(String[] args) throws Exception {
 
@@ -157,26 +202,21 @@ public class DemoServerTopology {
          */
         builder.setSpout("spout", new ServerSpout(), 1);
 
-//        /*
-//         * First bolt
-//         */
-//        DoublingBolt bolt1 = new DoublingBolt();
-//        bolt1.setDeadTasks(0);
-//        builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(1));
-//
-//        /*
-//         * Second bolt
-//         */
-//        final boolean DEDUP = true;
-//        if (DEDUP)
-//            builder.setBolt("bolt2", new DedupBolt("id"), 1).allGrouping("bolt1");
-//        else
-//            builder.setBolt("bolt2", new RegularBolt(), 1).allGrouping("bolt1");
+        /*
+         * First bolt
+         */
+        DummyBolt bolt1 = new DummyBolt();
+        builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(1));
+
+        /*
+         * Second bolt
+         */
+        builder.setBolt("bolt2", new DedupBolt(), 1).allGrouping("bolt1");
 
 
 
         Config conf = new Config();
-        conf.put(Config.TOPOLOGY_DEBUG, true);
+        conf.put(Config.TOPOLOGY_DEBUG, false);
 
 
         if (args != null && args.length > 0) {
