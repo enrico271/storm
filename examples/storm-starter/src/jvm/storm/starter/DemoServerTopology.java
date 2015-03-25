@@ -102,10 +102,16 @@ public class DemoServerTopology {
     public static class ServerSpout extends BaseRichSpout {
         SpoutOutputCollector _collector;
         private int count = 0;
+        private String largeString = null;
 
 
         public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
             _collector = collector;
+
+            StringBuffer str = new StringBuffer();
+            for (int i = 0; i < 1024; i++)
+                str.append('a');
+            largeString = str.toString();
 
             new Thread() {
                 @Override
@@ -118,14 +124,13 @@ public class DemoServerTopology {
 
         public void nextTuple() {
 
-            Utils.sleep(delay);
-            _collector.emit(new Values(count++, "Hello. Hello. Hello."));
-            System.out.println("Current delay is " + delay);
+            _collector.emit(new Values(count++, largeString, System.currentTimeMillis()));
+            //System.out.println("Current delay is " + delay);
         }
 
 
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "msg"));
+            declarer.declare(new Fields("id", "msg", "timestamp"));
         }
 
     }
@@ -136,7 +141,7 @@ public class DemoServerTopology {
 
         @Override
         public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("id", "msg"));
+            declarer.declare(new Fields("id", "msg", "timestamp"));
         }
 
         @Override
@@ -147,7 +152,7 @@ public class DemoServerTopology {
         @Override
         public void execute(Tuple input) {
 
-            _collector.emit(new Values(input.getIntegerByField("id"), input.getStringByField("msg")));
+            _collector.emit(new Values(input.getIntegerByField("id"), input.getStringByField("msg"), input.getLongByField("timestamp")));
         }
     }
 
@@ -155,6 +160,7 @@ public class DemoServerTopology {
 
         private int tuplesReceived = 0;
         private long lastPrint = 0;
+        private long totalLatency = 0;
 
         public DedupBolt() {
             super("id");
@@ -172,8 +178,11 @@ public class DemoServerTopology {
                     while (true) {
                         if (System.currentTimeMillis() - lastPrint >= 1000) {
                             System.out.println("Throughput: " + tuplesReceived + " tuples/sec");
+                            System.out.println("Average latency: " + ((double) totalLatency / tuplesReceived) + " ms");
                             lastPrint = System.currentTimeMillis();
                             tuplesReceived = 0;
+                            totalLatency = 0;
+                            clearKeys();
                         }
                     }
                 }
@@ -183,6 +192,9 @@ public class DemoServerTopology {
         @Override
         public void executeImpl(Tuple tuple) {
             tuplesReceived++;
+            long stamp = tuple.getLongByField("timestamp");
+            long latency = System.currentTimeMillis() - stamp;
+            totalLatency += latency;
         }
 
         @Override
