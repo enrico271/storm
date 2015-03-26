@@ -43,6 +43,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This topology demonstrates Storm's stream groupings and multilang capabilities.
@@ -169,9 +171,9 @@ public class DemoServerTopology {
 
     public static class DedupBolt extends DeduplicationBolt {
 
-        private int tuplesReceived = 0;
+        private AtomicInteger tuplesReceived = new AtomicInteger(0);
+        private AtomicLong totalLatency = new AtomicLong(0);
         private long lastPrint = 0;
-        private long totalLatency = 0;
 
         public DedupBolt() {
             super("id");
@@ -188,12 +190,11 @@ public class DemoServerTopology {
                 {
                     while (true) {
                         if (System.currentTimeMillis() - lastPrint >= 1000) {
-                            System.out.println("Throughput: " + tuplesReceived + " tuples/sec");
-                            System.out.println("Average latency: " + ((double) totalLatency / tuplesReceived) + " ms");
+                            System.out.println("Throughput: " + tuplesReceived.get() + " tuples/sec");
+                            System.out.println("Average latency: " + ((double) totalLatency.get() / tuplesReceived.get()) + " ms");
                             lastPrint = System.currentTimeMillis();
-                            tuplesReceived = 0;
-                            totalLatency = 0;
-                            clearKeys();
+                            tuplesReceived.set(0);
+                            totalLatency.set(0);
                         }
                     }
                 }
@@ -202,10 +203,10 @@ public class DemoServerTopology {
 
         @Override
         public void executeImpl(Tuple tuple) {
-            tuplesReceived++;
             long stamp = tuple.getLongByField("timestamp");
             long latency = System.currentTimeMillis() - stamp;
-            totalLatency += latency;
+            tuplesReceived.getAndIncrement();
+            totalLatency.addAndGet(latency);
         }
 
         @Override
