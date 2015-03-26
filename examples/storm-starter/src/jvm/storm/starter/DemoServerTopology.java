@@ -50,7 +50,6 @@ import java.util.Map;
 public class DemoServerTopology {
 
     private static ServerSocket listener;
-    private static int delay = 100;
     private static int size = 1024;
 
     public static void startServer() {
@@ -87,7 +86,7 @@ public class DemoServerTopology {
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 String msg;
                 while ((msg = in.readLine()) != null) {
-                    delay = Integer.parseInt(msg);
+                    size = Integer.parseInt(msg);
                 }
             }
             catch (IOException e) { e.printStackTrace(); }
@@ -103,13 +102,15 @@ public class DemoServerTopology {
         SpoutOutputCollector _collector;
         private int count = 0;
         private String largeString = null;
-
+        private int stringSize = 256;
+        private long intervalStart = -1;
+        private long intervalSizeSent = 0;
 
         public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
             _collector = collector;
 
             StringBuffer str = new StringBuffer();
-            for (int i = 0; i < 1024; i++)
+            for (int i = 0; i < stringSize; i++)
                 str.append('a');
             largeString = str.toString();
 
@@ -123,9 +124,19 @@ public class DemoServerTopology {
 
 
         public void nextTuple() {
-
-            _collector.emit(new Values(count++, largeString, System.currentTimeMillis()));
-            //System.out.println("Current delay is " + delay);
+            if (intervalSizeSent < size) {
+                _collector.emit(new Values(count++, largeString, System.currentTimeMillis()));
+                intervalSizeSent += stringSize;
+            } else {
+                long curTime = System.currentTimeMillis();
+                long extra = 1000 - (curTime - intervalStart);
+                System.out.println("Sent " + intervalSizeSent + " bytes with extra time " + extra);
+                if (extra > 0) {
+                    Utils.sleep(extra);
+                }
+                intervalStart = System.currentTimeMillis();
+                intervalSizeSent = 0;
+            }
         }
 
 
