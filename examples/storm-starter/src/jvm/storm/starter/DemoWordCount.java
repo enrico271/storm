@@ -24,11 +24,12 @@ import backtype.storm.grouping.KSafeFieldGrouping;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
-import backtype.storm.topology.DeduplicationBolt;
+import backtype.storm.topology.ksafety.DeduplicationBolt;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.topology.base.BaseRichSpout;
+import backtype.storm.topology.ksafety.KSafeSpout;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
@@ -48,16 +49,13 @@ public class DemoWordCount {
     private static final int TYPE_EOF = 1;
     private static final int TYPE_MARK = 2;
 
-    public static class WordSpout extends BaseRichSpout {
-        SpoutOutputCollector _collector;
+    public static class WordSpout extends KSafeSpout {
         private String _text = null;
         private Scanner _scan = null;
         private boolean markSent = false;
 
-
         @Override
-        public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
-            _collector = collector;
+        public void openImpl(Map conf, TopologyContext context) {
 
             _text = "Jianneng Ashkon Enrico Zhitao Michael\n" +
                     "Ashkon Zhitao Jianneng Enrico Michael\n" +
@@ -79,24 +77,24 @@ public class DemoWordCount {
 
             if (!markSent) {
                 // WARNING: This is a hack to send EOF to both tasks
-                _collector.emit(new Values("a", System.currentTimeMillis(), TYPE_MARK));
-                _collector.emit(new Values("b", System.currentTimeMillis(), TYPE_MARK));
+                emit(new Values("a", System.currentTimeMillis(), TYPE_MARK));
+                emit(new Values("b", System.currentTimeMillis(), TYPE_MARK));
                 markSent = true;
             }
             else if (_scan.hasNext())
-                _collector.emit(new Values(_scan.next(), System.currentTimeMillis(), TYPE_WORD));
+                emit(new Values(_scan.next(), System.currentTimeMillis(), TYPE_WORD));
             else {
                 // WARNING: This is a hack to send EOF to both tasks
-                _collector.emit(new Values("a", System.currentTimeMillis(), TYPE_EOF));
-                _collector.emit(new Values("b", System.currentTimeMillis(), TYPE_EOF));
+                emit(new Values("a", System.currentTimeMillis(), TYPE_EOF));
+                emit(new Values("b", System.currentTimeMillis(), TYPE_EOF));
                 _scan = new Scanner(_text);
                 markSent = false;
             }
         }
 
-
-        public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("word", "timestamp", "type"));
+        @Override
+        public Fields declareOutputFieldsImpl() {
+            return new Fields("word", "timestamp", "type");
         }
 
     }
@@ -121,6 +119,7 @@ public class DemoWordCount {
         public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
             _collector = collector;
             _taskIndex = context.getThisTaskIndex();
+            System.out.println("Number of tasks for this bolt: " + context.getComponentTasks(context.getThisComponentId()).size());
         }
 
 

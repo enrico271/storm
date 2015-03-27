@@ -1,4 +1,4 @@
-package backtype.storm.topology;
+package backtype.storm.topology.ksafety;
 
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;

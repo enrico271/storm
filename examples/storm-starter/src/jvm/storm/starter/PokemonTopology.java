@@ -20,26 +20,19 @@ package storm.starter;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
-import backtype.storm.generated.GlobalStreamId;
-import backtype.storm.grouping.CustomStreamGrouping;
 import backtype.storm.grouping.KSafeFieldGrouping;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.OutputCollector;
-import backtype.storm.task.ShellBolt;
 import backtype.storm.task.TopologyContext;
-import backtype.storm.task.WorkerTopologyContext;
 import backtype.storm.topology.*;
 import backtype.storm.topology.base.BaseBasicBolt;
-import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.topology.base.BaseRichSpout;
+import backtype.storm.topology.ksafety.DeduplicationBolt;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
 import backtype.storm.utils.Utils;
-import org.slf4j.LoggerFactory;
-import storm.starter.spout.RandomSentenceSpout;
 
-import java.io.Serializable;
 import java.util.*;
 
 /**

@@ -202,4 +202,9 @@ topology.bolts.outgoing.overflow.buffer.enable: false
 
 dev.zookeeper.path: "/tmp/dev-storm-zookeeper"
 
+## Use our scheduler
 storm.scheduler: "storm.MyScheduler"
+
+## List of custom serializations
+topology.kryo.register:
+- backtype.storm.topology.ksafety.KSafeData
