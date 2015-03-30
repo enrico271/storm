@@ -20,15 +20,14 @@ package storm.starter;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
-import backtype.storm.grouping.KSafeFieldGrouping;
-import backtype.storm.spout.SpoutOutputCollector;
+import backtype.storm.grouping.ksafety.KSafeFieldGrouping;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.ksafety.DeduplicationBolt;
 import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.topology.base.BaseRichBolt;
-import backtype.storm.topology.base.BaseRichSpout;
+import backtype.storm.topology.ksafety.KSafeBolt;
 import backtype.storm.topology.ksafety.KSafeSpout;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
@@ -44,7 +43,6 @@ import java.util.Scanner;
  */
 public class DemoWordCount {
 
-    private static org.apache.log4j.Logger LOG;
     private static final int TYPE_WORD = 0;
     private static final int TYPE_EOF = 1;
     private static final int TYPE_MARK = 2;
@@ -70,23 +68,23 @@ public class DemoWordCount {
             _scan = new Scanner(_text);
         }
 
-
+        @Override
         public void nextTuple() {
 
             Utils.sleep(100);
 
             if (!markSent) {
-                // WARNING: This is a hack to send EOF to both tasks
-                emit(new Values("a", System.currentTimeMillis(), TYPE_MARK));
-                emit(new Values("b", System.currentTimeMillis(), TYPE_MARK));
+                // WARNING: This is a hack to send mark to both tasks
+                emit(new Values("a", TYPE_MARK));
+                emit(new Values("b", TYPE_MARK));
                 markSent = true;
             }
             else if (_scan.hasNext())
-                emit(new Values(_scan.next(), System.currentTimeMillis(), TYPE_WORD));
+                emit(new Values(_scan.next(), TYPE_WORD));
             else {
                 // WARNING: This is a hack to send EOF to both tasks
-                emit(new Values("a", System.currentTimeMillis(), TYPE_EOF));
-                emit(new Values("b", System.currentTimeMillis(), TYPE_EOF));
+                emit(new Values("a", TYPE_EOF));
+                emit(new Values("b", TYPE_EOF));
                 _scan = new Scanner(_text);
                 markSent = false;
             }
@@ -94,67 +92,76 @@ public class DemoWordCount {
 
         @Override
         public Fields declareOutputFieldsImpl() {
-            return new Fields("word", "timestamp", "type");
+            return new Fields("word", "type");
         }
 
     }
 
-    public static class CountingBolt extends BaseRichBolt {
+    public static class CountingBolt extends KSafeBolt {
 
-        private OutputCollector _collector;
         private int _deadTasks = 0;
         private int _taskIndex;
 
-        private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
-        private Long _minTime = null;
-
-        private boolean marked = false;
+        //private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
+        //private boolean marked = false;
 
         @Override
-        public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("timestamp", "countMap", "taskId"));
+        public Fields declareOutputFieldsImpl() {
+            return new Fields("countMap", "taskId");
         }
 
         @Override
-        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
-            _collector = collector;
+        public void prepareImpl(Map stormConf, TopologyContext context) {
             _taskIndex = context.getThisTaskIndex();
-            System.out.println("Number of tasks for this bolt: " + context.getComponentTasks(context.getThisComponentId()).size());
         }
 
 
         @Override
-        public void execute(Tuple input) {
+        public void executeImpl(Tuple input) {
 
             if (_taskIndex < _deadTasks) {
                 return;
             }
 
-            long timestamp = input.getLongByField("timestamp");
             int type = input.getIntegerByField("type");
             String word = input.getStringByField("word");
 
             switch (type) {
+
                 case TYPE_WORD:
-                    if (_minTime == null || timestamp < _minTime)
-                        _minTime = timestamp;
-                    if (_countMap.containsKey(word))
-                        _countMap.put(word, _countMap.get(word) + 1);
+
+                    // Get the state
+                    @SuppressWarnings("unchecked")
+                    HashMap<String, Integer> countMap = (HashMap<String, Integer>) getState(input, "countMap");
+                    if (countMap == null)
+                        countMap = new HashMap<>();
+
+                    // Modify the state
+                    if (countMap.containsKey(word))
+                        countMap.put(word, countMap.get(word) + 1);
                     else
-                        _countMap.put(word, 1);
+                        countMap.put(word, 1);
+
+                    // Save the state
+                    setState(input, "countMap", countMap);
+
                     break;
 
                 case TYPE_EOF:
-                    if (marked) {
-                        _collector.emit(new Values(_minTime, _countMap, _taskIndex));
-                        _countMap = new HashMap<String, Integer>();
+
+                    Boolean marked = (Boolean) getState(input, "marked");
+
+                    if (marked != null && marked) {
+                        emit(input, new Values(getState(input, "countMap"), _taskIndex));
+                        setState(input, "countMap", new HashMap<String, Integer>());
                     }
-                    _minTime = null;
-                    marked = false;
+
+                    setState(input, "marked", false);
+
                     break;
 
                 case TYPE_MARK:
-                    marked = true;
+                    setState(input, "marked", true);
                     break;
 
                 default:
@@ -169,32 +176,35 @@ public class DemoWordCount {
         }
     }
 
-    public static class DedupBolt extends DeduplicationBolt {
-
-        public DedupBolt() {
-            super("timestamp");
-        }
+    public static class DedupBolt extends KSafeBolt {
 
         @Override
-        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
-
+        protected void prepareImpl(Map stormConf, TopologyContext context) {
+            new Thread() {
+                @Override
+                public void run(){
+                    while (true) {
+                        Utils.sleep(2000);
+                        System.out.println("...");
+                    }
+                }
+            }.start();
         }
 
         @Override
         public void executeImpl(Tuple tuple) {
 
+            @SuppressWarnings("unchecked")
             HashMap<String, Integer> countMap = (HashMap<String,Integer>) tuple.getValueByField("countMap");
 
-            org.apache.log4j.Logger.getLogger(DedupBolt.class).info("----------- Capstone (Word Count from task " + tuple.getIntegerByField("taskId") + ") -------------");
+            System.out.println("--- Word Count from task " + tuple.getIntegerByField("taskId") + ") ---");
             for (String s : countMap.keySet())
-                org.apache.log4j.Logger.getLogger(DedupBolt.class).info(s + ": " + countMap.get(s));
-
-            // WARNING: This implementation never clears the hash set inside DeduplicationBolt
+                System.out.println(s + ": " + countMap.get(s));
         }
 
         @Override
-        public void declareOutputFields(OutputFieldsDeclarer declarer) {
-            declarer.declare(new Fields("timestamp")); // unused
+        public Fields declareOutputFieldsImpl() {
+            return new Fields("timestamp"); // unused
         }
 
     }
@@ -202,18 +212,15 @@ public class DemoWordCount {
 
     public static void main(String[] args) throws Exception {
 
-        int k = 0;
+        int k = 1;
 
         if (args.length >= 1) {
             k = Integer.parseInt(args[0]);
             org.apache.log4j.Logger.getLogger(DemoWordCount.class).info("Hello world! Starting topology with k = " + k);
         }
         else {
-            k = 0;
             org.apache.log4j.Logger.getLogger(DemoWordCount.class).info("Hello world! No argument is found. Starting topology with no k-safety.");
         }
-
-
 
 
         TopologyBuilder builder = new TopologyBuilder();
@@ -227,7 +234,7 @@ public class DemoWordCount {
          * First bolt
          */
         CountingBolt bolt1 = new CountingBolt();
-        //bolt1.setDeadTasks(1);
+        bolt1.setDeadTasks(0);
         builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(k));
 
         /*
@@ -240,7 +247,7 @@ public class DemoWordCount {
         conf.put(Config.TOPOLOGY_DEBUG, false);
 
 
-        if (args != null && args.length > 0) {
+        if (args.length > 0) {
             conf.setNumWorkers(3);
 
             StormSubmitter.submitTopologyWithProgressBar(args[0], conf, builder.createTopology());
