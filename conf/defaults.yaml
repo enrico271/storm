@@ -207,4 +207,4 @@ storm.scheduler: "storm.MyScheduler"
 
 ## List of custom serializations
 topology.kryo.register:
-- backtype.storm.topology.ksafety.KSafeData
+- backtype.storm.topology.ksafety.KSafeInfo

@@ -17,7 +17,6 @@ import java.util.Map;
 public abstract class KSafeSpout extends BaseRichSpout {
     private SpoutOutputCollector collector;
     private String id;
-    private long counter = 0;
 
     /**
      * Storm calls this method after this component is deployed on the cluster. User needs to implement openImpl instead
@@ -49,7 +48,7 @@ public abstract class KSafeSpout extends BaseRichSpout {
      * @param tuple the output tuple to emit
      */
     protected void emit(List<Object> tuple) {
-        tuple.add(new KSafeData(id, counter++));
+        tuple.add(new KSafeInfo(id));
         this.collector.emit(tuple);
     }
 
@@ -71,7 +70,7 @@ public abstract class KSafeSpout extends BaseRichSpout {
     /**
      * Implement this method to declare output fields instead of implementing the regular declareOutputFields
      *
-     * @return must be implemented to return the field names to declare
+     * @return must be implemented to return the output fields
      */
     protected abstract Fields declareOutputFieldsImpl();
 }
