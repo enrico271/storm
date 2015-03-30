@@ -90,9 +90,17 @@ public class MyScheduler implements IScheduler {
             for(ExecutorDetails executor: executors) {
                 List<ExecutorDetails> executorToAssign = new ArrayList<ExecutorDetails>();
                 executorToAssign.add(executor);
+				SupervisorDetails bestSupervisor = null;
+				int mostSlots = -1;
                 if (unusedSupervisors.size() !=  0) {
-                    SupervisorDetails supervisor = unusedSupervisors.get(random.nextInt(unusedSupervisors.size()));
-                    List<WorkerSlot> availableSlots = cluster.getAvailableSlots(supervisor);
+					for(SupervisorDetails supervisor: unusedSupervisors){
+						List<WorkerSlot> availableSlots = cluster.getAvailableSlots(supervisor);
+						if(availableSlots.size() > mostSlots){
+							bestSupervisor = supervisor;
+							mostSlots = availableSlots.size();
+						}
+					}
+					List<WorkerSlot> availableSlots = cluster.getAvailableSlots(bestSupervisor);
                     System.out.println("PRINTING AVAILABLE SLOTS");
                     for (WorkerSlot slot : availableSlots) {
                         System.out.println(slot.toString());
@@ -101,20 +109,20 @@ public class MyScheduler implements IScheduler {
                     // if there is no available slots on this supervisor, free some.
                     if (availableSlots.isEmpty() && !executors.isEmpty()) {
                         LOG.info("Freeing all slots for a supervisor");
-                        for (Integer port : cluster.getUsedPorts(supervisor)) {
-                            cluster.freeSlot(new WorkerSlot(supervisor.getId(), port));
+                        for (Integer port : cluster.getUsedPorts(bestSupervisor)) {
+                            cluster.freeSlot(new WorkerSlot(bestSupervisor.getId(), port));
                         }
                     } else
                         System.out.println("No need to free slot");
 
                     // re-get the aviableSlots
-                    availableSlots = cluster.getAvailableSlots(supervisor);
+                    availableSlots = cluster.getAvailableSlots(bestSupervisor);
 
                     // Assign into one RANDOM slot.
                     int rand = random.nextInt(availableSlots.size());
 
                     cluster.assign(availableSlots.get(rand), topology.getId(), executorToAssign);
-                    unusedSupervisors.remove(supervisor);
+                    unusedSupervisors.remove(bestSupervisor);
                     LOG.info("We assigned executor:" + executor + " to slot: [" + availableSlots.get(rand).getNodeId() + ", " + availableSlots.get(rand).getPort() + "]");
                 }
                 else{
