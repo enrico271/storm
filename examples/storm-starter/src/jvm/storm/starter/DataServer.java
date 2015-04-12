@@ -6,11 +6,12 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.atomic.AtomicInteger;
 
 class DataGenerator {
     ServerSocket socket;
     static int idCounter = 0;
-    int totalTuplesSent = 0;
+    AtomicInteger totalTuplesSent = new AtomicInteger(0);
     int totalTuplesToSend;
     int tuplesPerSecond;
 
@@ -40,9 +41,7 @@ class DataGenerator {
                         out.println(System.currentTimeMillis());
                         out.flush();
                         sent++;
-                        synchronized(this) {
-                            totalTuplesSent++;
-                        }
+                        totalTuplesSent.getAndIncrement();
                     }
                     long extra = 1000 - (System.currentTimeMillis() - intervalStart);
                     System.out.println("Sent " + tuplesPerSecond + " tuples to " + id + " with extra time " + extra);
@@ -134,9 +133,11 @@ class PrintStats implements Runnable {
         int lastTotalTuplesReceived = 0;
         while (true) {
             long curTime = System.currentTimeMillis();
+            int totalTuplesSent;
             int intervalTuplesReceived;
             long intervalLatency;
             synchronized(dataListener) {
+                totalTuplesSent = dataGenerator.totalTuplesSent.get();
                 intervalTuplesReceived = dataListener.intervalTuplesReceived;
                 intervalLatency = dataListener.intervalLatency;
                 dataListener.intervalTuplesReceived = 0;
@@ -144,17 +145,17 @@ class PrintStats implements Runnable {
             }
             dataListener.totalTuplesReceived += intervalTuplesReceived;
             dataListener.totalLatency += intervalLatency;
-            if (dataGenerator.totalTuplesSent > lastTotalTuplesSent
+            if (totalTuplesSent > lastTotalTuplesSent
                     || dataListener.totalTuplesReceived > lastTotalTuplesReceived) {
                 System.out.print(System.currentTimeMillis());
                 System.out.print("    Interval received: " + intervalTuplesReceived);
                 System.out.print(" latency: " + ((double) intervalLatency / intervalTuplesReceived));
                 System.out.print("    Total received: " + dataListener.totalTuplesReceived);
                 System.out.print(" latency: " + ((double) dataListener.totalLatency / dataListener.totalTuplesReceived));
-                System.out.print("    Total sent: " + dataGenerator.totalTuplesSent);
+                System.out.print("    Total sent: " + totalTuplesSent);
                 System.out.println();
             }
-            lastTotalTuplesSent = dataGenerator.totalTuplesSent;
+            lastTotalTuplesSent = totalTuplesSent;
             lastTotalTuplesReceived = dataListener.totalTuplesReceived;
             try {
                 Thread.sleep(1000 - (System.currentTimeMillis() - curTime));
