@@ -20,7 +20,6 @@ package storm.starter;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
-import backtype.storm.grouping.ksafety.KSafeFieldGrouping;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -28,7 +27,6 @@ import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.topology.base.BaseRichSpout;
-import backtype.storm.topology.ksafety.DeduplicationBolt;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
@@ -42,21 +40,19 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 
-public class BenchmarkTopology {
+public class BenchmarkStormTopology {
 
     private static final int TUPLE_SIZE = 256;
     private static final int ONE_MB = 1024000;
     private static final int[] BANDWIDTHS = {ONE_MB, 2* ONE_MB, 4 * ONE_MB, 8 * ONE_MB, 16 * ONE_MB, 32 * ONE_MB};
     //private static final int[] BANDWIDTHS = {16 * ONE_MB, 32 * ONE_MB};
-    private static final int[] EXPECTED_TUPLES = new int[BANDWIDTHS.length];
-    private static final int PHASE_DURATION_SEC = 10;
+    private static final int PHASE_DURATION_SEC = 20;
     private static final String DONE = "done";
     private static final int PORT = 6789;
 
-    public static class ServerSpout extends BaseRichSpout {
+    public static class Spout extends BaseRichSpout {
         SpoutOutputCollector _collector;
         private int count = 0;
         private String largeString = null;
@@ -66,8 +62,15 @@ public class BenchmarkTopology {
         private int tuplesSent = 0;
         private boolean waitForNextPhase = false;
         private BufferedReader in = null;
+        private static final int[] EXPECTED_TUPLES = new int[BANDWIDTHS.length];
 
         public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
+
+            for (int i = 0; i < BANDWIDTHS.length; i++) {
+                EXPECTED_TUPLES[i] = BANDWIDTHS[i] / TUPLE_SIZE * PHASE_DURATION_SEC;
+                System.out.println("Setting phase " + i + ", expected tuples: " + EXPECTED_TUPLES[i]);
+            }
+
             _collector = collector;
 
             StringBuffer str = new StringBuffer();
@@ -118,16 +121,20 @@ public class BenchmarkTopology {
                 Utils.sleep(1000);
             }
 
+            if (intervalStart == -1)
+                intervalStart = System.currentTimeMillis();
+
             if (intervalSizeSent < BANDWIDTHS[phase]) {
                 tuplesSent++;
                 if (tuplesSent == EXPECTED_TUPLES[phase])
                     waitForNextPhase = true;
-                _collector.emit(new Values(count++, largeString, System.currentTimeMillis()));
+                _collector.emit(new Values(count++, largeString, System.currentTimeMillis()), count++);
                 intervalSizeSent += TUPLE_SIZE;
             } else {
                 long curTime = System.currentTimeMillis();
                 long extra = 1000 - (curTime - intervalStart);
                 System.out.println("Sent " + intervalSizeSent + " bytes with extra time " + extra);
+                System.out.println(tuplesSent + " / " + EXPECTED_TUPLES[phase] + " tuples");
                 if (extra > 0) {
                     Utils.sleep(extra);
                 }
@@ -160,20 +167,32 @@ public class BenchmarkTopology {
         @Override
         public void execute(Tuple input) {
 
-            _collector.emit(input.getValues());
+            _collector.emit(input, input.getValues());
+            _collector.ack(input);
         }
     }
 
     public static class FinalBolt extends BaseRichBolt {
 
-        private int tuplesReceived = 0;
+        OutputCollector _collector;
+
+        private volatile AtomicInteger tuplesReceived = new AtomicInteger(0);
         private long startTime = 0;
         private long totalLatency = 0;
         private int phase = 0;
         private PrintWriter out = null;
+        private static final int[] EXPECTED_TUPLES = new int[BANDWIDTHS.length];
 
         @Override
         public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+
+            _collector = collector;
+
+            for (int i = 0; i < BANDWIDTHS.length; i++) {
+                EXPECTED_TUPLES[i] = BANDWIDTHS[i] / TUPLE_SIZE * PHASE_DURATION_SEC;
+                System.out.println("Setting phase " + i + ", expected tuples: " + EXPECTED_TUPLES[i]);
+            }
+
             try {
                 out = new PrintWriter(new Socket("localhost", PORT).getOutputStream(), true);
                 System.out.println("Final bolt connection OK");
@@ -181,6 +200,20 @@ public class BenchmarkTopology {
                 e.printStackTrace();
                 System.exit(1);
             }
+
+            new Thread() {
+                @Override
+                public void run() {
+                    while (true) {
+                        Utils.sleep(1000);
+                        if (phase < BANDWIDTHS.length)
+                            System.out.println("Phase " + phase + ": received " + tuplesReceived.get() + " / " + EXPECTED_TUPLES[phase]);
+                        else
+                            System.out.println("Benchmark finished");
+                    }
+                }
+
+            }.start();
         }
 
         @Override
@@ -189,15 +222,16 @@ public class BenchmarkTopology {
             long latency = System.currentTimeMillis() - stamp;
             totalLatency += latency;
 
-            if (tuplesReceived == 0)
+            if (tuplesReceived.get() == 0)
                 startTime = System.currentTimeMillis();
 
-            tuplesReceived++;
+            tuplesReceived.incrementAndGet();
 
-            if (tuplesReceived == EXPECTED_TUPLES[phase]) {
+
+            if (tuplesReceived.get() == EXPECTED_TUPLES[phase]) {
                 long totalTime = System.currentTimeMillis() - startTime;
-                double avgBandwidth = (double) (tuplesReceived * TUPLE_SIZE / ONE_MB) / (totalTime / 1000);
-                double avgLatency = (double) totalLatency / tuplesReceived;
+                double avgBandwidth = (double) (tuplesReceived.get() * TUPLE_SIZE / ONE_MB) / (totalTime / 1000);
+                double avgLatency = (double) totalLatency / tuplesReceived.get();
                 // double avgLatency = (double) totalTime / tuplesReceived; // this one is not 100% accurate, but it allows final bolt and spout to be on different machines
 
                 System.out.println("===== Phase " + phase + " finished! =====");
@@ -207,7 +241,7 @@ public class BenchmarkTopology {
                 System.out.println("Avg latency: " + avgLatency + " ms.");
 
                 // Reset vars
-                tuplesReceived = 0;
+                tuplesReceived.set(0);
                 totalLatency = 0;
                 phase++;
                 out.println(DONE);
@@ -216,6 +250,8 @@ public class BenchmarkTopology {
                 else
                     System.out.println("Benchmark finished");
             }
+
+            _collector.ack(tuple);
         }
 
         @Override
@@ -228,24 +264,19 @@ public class BenchmarkTopology {
 
     public static void main(String[] args) throws Exception {
 
-        for (int i = 0; i < BANDWIDTHS.length; i++) {
-            EXPECTED_TUPLES[i] = BANDWIDTHS[i] / TUPLE_SIZE * PHASE_DURATION_SEC;
-            System.out.println("Setting phase " + i + ", expected tuples: " + EXPECTED_TUPLES[i]);
-        }
-
         TopologyBuilder builder = new TopologyBuilder();
 
         /*
          * Spout
          */
-        builder.setSpout("spout", new ServerSpout(), 1);
+        builder.setSpout("spout", new Spout(), 1);
 
         /*
          * First bolt
          */
         DummyBolt bolt1 = new DummyBolt();
         //builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(0));
-        builder.setBolt("bolt1", bolt1, 2).fieldsGrouping("spout", new Fields("msg"));
+        builder.setBolt("bolt1", bolt1, 4).fieldsGrouping("spout", new Fields("id"));
 
         /*
          * Second bolt
