@@ -73,7 +73,7 @@ public class DemoWordCountBenchmark {
             _scan = new Scanner(_text);
 
             try {
-                socket = new Socket("localhost", 2222);
+                socket = new Socket("storm00", 2222);
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             } catch (IOException e) { e.printStackTrace(); }
         }
@@ -211,7 +211,7 @@ public class DemoWordCountBenchmark {
         @Override
         protected void prepareImpl(Map stormConf, TopologyContext context) {
             try {
-                socket = new Socket("localhost", 3333);
+                socket = new Socket("storm00", 3333);
                 out = new PrintWriter(socket.getOutputStream(), true);
             } catch (IOException e) { e.printStackTrace(); }
         }
