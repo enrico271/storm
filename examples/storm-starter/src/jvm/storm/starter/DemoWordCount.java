@@ -21,12 +21,8 @@ import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
 import backtype.storm.grouping.ksafety.KSafeFieldGrouping;
-import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
-import backtype.storm.topology.ksafety.DeduplicationBolt;
-import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.topology.TopologyBuilder;
-import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.topology.ksafety.KSafeBolt;
 import backtype.storm.topology.ksafety.KSafeSpout;
 import backtype.storm.tuple.Fields;
@@ -42,6 +38,8 @@ import java.util.Scanner;
  * This topology demonstrates Storm's stream groupings and multilang capabilities.
  */
 public class DemoWordCount {
+
+    private static final int COUNTING_BOLT_TASKS = 4;
 
     private static final int TYPE_WORD = 0;
     private static final int TYPE_EOF = 1;
@@ -74,17 +72,19 @@ public class DemoWordCount {
             Utils.sleep(100);
 
             if (!markSent) {
-                // WARNING: This is a hack to send mark to both tasks
-                emit(new Values("a", TYPE_MARK));
-                emit(new Values("b", TYPE_MARK));
+                // WARNING: This is a hack to send mark to all tasks
+                for (int i = 0; i < COUNTING_BOLT_TASKS; i++)
+                    emit(new Values("" + i, TYPE_MARK));
+
                 markSent = true;
             }
             else if (_scan.hasNext())
                 emit(new Values(_scan.next(), TYPE_WORD));
             else {
-                // WARNING: This is a hack to send EOF to both tasks
-                emit(new Values("a", TYPE_EOF));
-                emit(new Values("b", TYPE_EOF));
+                // WARNING: This is a hack to send EOF to all tasks
+                for (int i = 0; i < COUNTING_BOLT_TASKS; i++)
+                    emit(new Values("" + i, TYPE_EOF));
+
                 _scan = new Scanner(_text);
                 markSent = false;
             }
@@ -113,6 +113,7 @@ public class DemoWordCount {
         @Override
         public void prepareImpl(Map stormConf, TopologyContext context) {
             _taskIndex = context.getThisTaskIndex();
+            System.out.println("SETTING TASK " + _taskIndex);
         }
 
 
@@ -148,7 +149,6 @@ public class DemoWordCount {
                     break;
 
                 case TYPE_EOF:
-
                     Boolean marked = (Boolean) getState(input, "marked");
 
                     if (marked != null && marked) {
@@ -219,7 +219,7 @@ public class DemoWordCount {
             org.apache.log4j.Logger.getLogger(DemoWordCount.class).info("Hello world! Starting topology with k = " + k);
         }
         else {
-            org.apache.log4j.Logger.getLogger(DemoWordCount.class).info("Hello world! No argument is found. Starting topology with no k-safety.");
+            org.apache.log4j.Logger.getLogger(DemoWordCount.class).info("Hello world! No argument is found. Starting topology with k = " + k);
         }
 
 
@@ -228,19 +228,19 @@ public class DemoWordCount {
         /*
          * Spout
          */
-        builder.setSpout("spout", new WordSpout(), 1);
+        builder.setSpout("spout", new WordSpout(), 2);
 
         /*
          * First bolt
          */
         CountingBolt bolt1 = new CountingBolt();
         bolt1.setDeadTasks(0);
-        builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(k));
+        builder.setBolt("bolt1", bolt1, COUNTING_BOLT_TASKS).customGrouping("spout", new KSafeFieldGrouping(k));
 
         /*
          * Second bolt
          */
-        builder.setBolt("bolt2", new DedupBolt(), 1).allGrouping("bolt1");
+        builder.setBolt("bolt2", new DedupBolt(), 2).customGrouping("bolt1", new KSafeFieldGrouping(k));
 
 
         Config conf = new Config();
