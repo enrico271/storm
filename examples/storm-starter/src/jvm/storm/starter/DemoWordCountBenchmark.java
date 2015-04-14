@@ -44,7 +44,7 @@ import java.util.Scanner;
  */
 public class DemoWordCountBenchmark {
 
-    private static final int COUNTING_BOLT_TASKS = 2;
+    private static final int COUNTING_BOLT_TASKS = 4;
 
     private static final int TYPE_WORD = 0;
     private static final int TYPE_EOF = 1;
@@ -81,7 +81,7 @@ public class DemoWordCountBenchmark {
         @Override
         public void nextTuple() {
 
-            Utils.sleep(100);
+            //Utils.sleep(100);
 
             if (!markSent) {
                 // WARNING: This is a hack to send mark to all tasks
@@ -147,7 +147,7 @@ public class DemoWordCountBenchmark {
             int type = input.getIntegerByField("type");
             String word = input.getStringByField("word");
             Long time = input.getLongByField("time");
-
+            Boolean marked = (Boolean) getState(input, "marked");
             switch (type) {
 
                 case TYPE_WORD:
@@ -167,21 +167,26 @@ public class DemoWordCountBenchmark {
                         count = 1;
                         countMap.put(word, 1);
                     }
-                    emit(input,new Values(word, count, _taskIndex, time ));
+
+
+                    if (marked != null && marked) {
+                        emit(input,new Values(word, count, _taskIndex, time ));
+                    }
 
                     // Save the state
+
                     setState(input, "countMap", countMap);
 
                     break;
 
                 case TYPE_EOF:
 
-                    Boolean marked = (Boolean) getState(input, "marked");
 
-                    if (marked != null && marked) {
+                    //if (marked != null && marked) {
                        // emit(input, new Values(getState(input, "countMap"), _taskIndex));
-                        setState(input, "countMap", new HashMap<String, Integer>());
-                    }
+                        //setState(input, "countMap", new HashMap<String, Integer>());
+                    //}
+                    setState(input, "countMap", new HashMap<String, Integer>());
 
                     setState(input, "marked", false);
 
@@ -224,7 +229,7 @@ public class DemoWordCountBenchmark {
             String count = tuple.getIntegerByField("count").toString();
             Long time = tuple.getLongByField("time");
             //HashMap<String, Integer> countMap = (HashMap<String,Integer>) tuple.getValueByField("countMap");
-            System.out.println(word + ": " + count);
+            //System.out.println(word + ": " + count);
             out.println(time);
             out.flush();
             //System.out.println("--- Word Count from task " + tuple.getIntegerByField("taskId") + ") ---");
@@ -256,7 +261,7 @@ public class DemoWordCountBenchmark {
         /*
          * Spout
          */
-        builder.setSpout("spout", new WordSpout(), 1);
+        builder.setSpout("spout", new WordSpout(), 2);
 
         /*
          * First bolt
@@ -268,7 +273,7 @@ public class DemoWordCountBenchmark {
         /*
          * Second bolt
          */
-        builder.setBolt("bolt2", new DedupBolt(), 1).customGrouping("bolt1", new KSafeFieldGrouping(0));
+        builder.setBolt("bolt2", new DedupBolt(), 2).customGrouping("bolt1", new KSafeFieldGrouping(0));
 
 
         Config conf = new Config();
