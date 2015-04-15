@@ -247,12 +247,12 @@ public class DemoWordCountBenchmark {
 
         int k = 1;
 
-        if (args.length >= 1) {
-            k = Integer.parseInt(args[0]);
+        if (args.length >= 2) {
+            k = Integer.parseInt(args[1]);
             org.apache.log4j.Logger.getLogger(DemoWordCountBenchmark.class).info("Hello world! Starting topology with k = " + k);
         }
         else {
-            org.apache.log4j.Logger.getLogger(DemoWordCountBenchmark.class).info("Hello world! No argument is found. Starting topology with no k-safety.");
+            org.apache.log4j.Logger.getLogger(DemoWordCountBenchmark.class).info("Hello world! No argument is found. Starting topology with no k = 1");
         }
 
 

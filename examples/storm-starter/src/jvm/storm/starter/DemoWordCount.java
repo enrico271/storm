@@ -39,7 +39,7 @@ import java.util.Scanner;
  */
 public class DemoWordCount {
 
-    private static final int COUNTING_BOLT_TASKS = 4;
+    private static final int COUNTING_BOLT_TASKS = 2;
 
     private static final int TYPE_WORD = 0;
     private static final int TYPE_EOF = 1;
@@ -153,8 +153,8 @@ public class DemoWordCount {
 
                     if (marked != null && marked) {
                         emit(input, new Values(getState(input, "countMap"), _taskIndex));
-                        setState(input, "countMap", new HashMap<String, Integer>());
                     }
+                    setState(input, "countMap", new HashMap<String, Integer>());
 
                     setState(input, "marked", false);
 
