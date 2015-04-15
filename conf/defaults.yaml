@@ -194,7 +194,7 @@ topology.error.throttle.interval.secs: 10
 topology.max.error.report.per.interval: 5
 topology.kryo.factory: "backtype.storm.serialization.DefaultKryoFactory"
 topology.tuple.serializer: "backtype.storm.serialization.types.ListDelegateSerializer"
-topology.trident.batch.emit.interval.millis: 500
+topology.trident.batch.emit.interval.millis: 0
 topology.testing.always.try.serialize: false
 topology.classpath: null
 topology.environment: null
@@ -203,7 +203,7 @@ topology.bolts.outgoing.overflow.buffer.enable: false
 dev.zookeeper.path: "/tmp/dev-storm-zookeeper"
 
 ## Use our scheduler
-storm.scheduler: "storm.MyScheduler"
+##storm.scheduler: "storm.MyScheduler"
 
 ## List of custom serializations
 topology.kryo.register:
