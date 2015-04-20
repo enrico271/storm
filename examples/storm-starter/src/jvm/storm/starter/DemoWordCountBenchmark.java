@@ -24,6 +24,7 @@ import backtype.storm.grouping.ksafety.KSafeFieldGrouping;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.topology.ksafety.KSafeBolt;
+import backtype.storm.topology.ksafety.KSafeInfo;
 import backtype.storm.topology.ksafety.KSafeSpout;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
@@ -44,7 +45,8 @@ import java.util.Scanner;
  */
 public class DemoWordCountBenchmark {
 
-    private static final int COUNTING_BOLT_TASKS = 4;
+    private static final int COUNTING_BOLT_TASKS = 3;
+    private static final int NUM_SPOUTS = 1;
 
     private static final int TYPE_WORD = 0;
     private static final int TYPE_EOF = 1;
@@ -56,10 +58,30 @@ public class DemoWordCountBenchmark {
         private boolean markSent = false;
         private Socket socket;
         private BufferedReader in;
+        private int window = 0;
+        private int stringSize = 256;
+        private String[] letters = new String[] {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t" ,"u" ,"v","w","x","y","z"};
+        private String[] strs = new String[26];
 
         @Override
         public void openImpl(Map conf, TopologyContext context) {
 
+            StringBuilder str = new StringBuilder();
+            for(int k =0; k < 10; k++) {
+                for (int i = 0; i < 26; i++) {
+                    String curChar = letters[i];
+                    str.append(curChar);
+                    for (int j = 0; j < stringSize - 1; j++)
+                        str.append("a");
+                    str.append(" ");
+                }
+            }
+            _text = str.toString();
+
+
+
+
+            /*
             _text = "Jianneng Ashkon Enrico Zhitao Michael\n" +
                     "Ashkon Zhitao Jianneng Enrico Michael\n" +
                     "Zhitao Jianneng Michael Enrico Ashkon\n" +
@@ -70,6 +92,8 @@ public class DemoWordCountBenchmark {
                     "Zhitao Jianneng Michael Enrico Ashkon\n" +
                     "Enrico Ashkon Zhitao Michael Jianneng\n" +
                     "Michael Ashkon Zhitao Jianneng Enrico";
+             */
+
             _scan = new Scanner(_text);
 
             try {
@@ -85,8 +109,9 @@ public class DemoWordCountBenchmark {
 
             if (!markSent) {
                 // WARNING: This is a hack to send mark to all tasks
-                for (int i = 0; i < COUNTING_BOLT_TASKS; i++)
-                    emit(new Values("" + i, TYPE_MARK, 0L));
+
+                for (int i = 0; i < COUNTING_BOLT_TASKS; i+=2)
+                    emit(new Values("" + i, TYPE_MARK, window, 0L));
 
                 markSent = true;
             }
@@ -96,24 +121,25 @@ public class DemoWordCountBenchmark {
                     String msg = in.readLine();
                     if (msg != null) {
                         Long time = Long.parseLong(msg.substring(0, 13));
-                        emit(new Values(_scan.next(), TYPE_WORD, time));
+                        emit(new Values(_scan.next(), TYPE_WORD, window, time));
                     }
                 }
                 catch (IOException e) { e.printStackTrace(); }
 
             else {
                 // WARNING: This is a hack to send EOF to all tasks
-                for (int i = 0; i < COUNTING_BOLT_TASKS; i++)
-                    emit(new Values("" + i, TYPE_EOF, 0L));
+                for (int i = 0; i < COUNTING_BOLT_TASKS; i+=2)
+                    emit(new Values("" + i, TYPE_EOF, window, 0L));
 
                 _scan = new Scanner(_text);
+                window++;
                 markSent = false;
             }
         }
 
         @Override
         public Fields declareOutputFieldsImpl() {
-            return new Fields("word", "type", "time");
+            return new Fields("word", "type", "windowId", "time");
         }
 
     }
@@ -122,18 +148,34 @@ public class DemoWordCountBenchmark {
 
         private int _deadTasks = 0;
         private int _taskIndex;
+        private HashMap<Integer, Integer> marks;
+        private HashMap<Integer,Integer> acks;
+        private HashMap<Integer, HashMap<String,Integer>> countMaps;
+        private int count;
+
+        /**
+         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
+         * of this method.
+         *
+         * @param k
+         */
+        public CountingBolt(int k) {
+            super(k);
+        }
 
         //private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
         //private boolean marked = false;
 
         @Override
         public Fields declareOutputFieldsImpl() {
-            return new Fields("word", "count", "taskId", "time");
+            return new Fields("word", "count", "taskId", "windowId", "time");
         }
 
         @Override
         public void prepareImpl(Map stormConf, TopologyContext context) {
             _taskIndex = context.getThisTaskIndex();
+            acks = new HashMap<>();
+            marks = new HashMap<>();
         }
 
 
@@ -147,16 +189,26 @@ public class DemoWordCountBenchmark {
             int type = input.getIntegerByField("type");
             String word = input.getStringByField("word");
             Long time = input.getLongByField("time");
-            Boolean marked = (Boolean) getState(input, "marked");
+            int windowId = input.getIntegerByField("windowId");
+            //Boolean marked = (Boolean) getState(input, "marked");
+
+
+            @SuppressWarnings("unchecked")
+            HashMap<Integer, HashMap<String,Integer>> countMaps = (HashMap<Integer, HashMap<String,Integer>>) getState(input, "countMap");
+            if (countMaps == null)
+                countMaps = new HashMap<>();
+
             switch (type) {
 
                 case TYPE_WORD:
                     int count;
                     // Get the state
-                    @SuppressWarnings("unchecked")
-                    HashMap<String, Integer> countMap = (HashMap<String, Integer>) getState(input, "countMap");
-                    if (countMap == null)
-                        countMap = new HashMap<>();
+
+                    if(!(countMaps.containsKey(windowId))){
+                        countMaps.put(windowId, new HashMap<String, Integer>());
+                    }
+                    HashMap<String, Integer> countMap = countMaps.get(windowId);
+
 
                     // Modify the state
                     if (countMap.containsKey(word)) {
@@ -169,31 +221,46 @@ public class DemoWordCountBenchmark {
                     }
 
 
-                    if (marked != null && marked) {
-                        emit(input,new Values(word, count, _taskIndex, time ));
+                    if (marks.containsKey(windowId)) {
+                       // System.out.println(word + ": " + count);
+                        emit(input,new Values(word, count, _taskIndex, windowId, time ));
                     }
 
                     // Save the state
 
-                    setState(input, "countMap", countMap);
+                    setState(input, "countMap", countMaps);
 
                     break;
 
                 case TYPE_EOF:
-
+                    if(!acks.containsKey(windowId)){
+                        acks.put(windowId, 1);
+                    }
+                    else{
+                        int numAcks = acks.get(windowId) + 1;
+                        if(numAcks == NUM_SPOUTS){
+                            acks.remove(windowId);
+                            countMaps.put(windowId, new HashMap<String, Integer>());
+                            setState(input, "countMap", countMaps);
+                            marks.remove(windowId);
+                        }else{
+                            acks.put(windowId, numAcks);
+                        }
+                    }
 
                     //if (marked != null && marked) {
                        // emit(input, new Values(getState(input, "countMap"), _taskIndex));
                         //setState(input, "countMap", new HashMap<String, Integer>());
                     //}
-                    setState(input, "countMap", new HashMap<String, Integer>());
 
-                    setState(input, "marked", false);
+                    //setState(input, "countMap", new HashMap<String, Integer>());
+                    //setState(input, "marked", false);
 
                     break;
 
                 case TYPE_MARK:
-                    setState(input, "marked", true);
+                   // setState(input, "marked", true);
+                    marks.put(windowId, 1);
                     break;
 
                 default:
@@ -212,6 +279,17 @@ public class DemoWordCountBenchmark {
 
         private Socket socket;
         private PrintWriter out;
+        private int count;
+
+        /**
+         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
+         * of this method.
+         *
+         * @param k
+         */
+        public DedupBolt(int k) {
+            super(k);
+        }
 
         @Override
         protected void prepareImpl(Map stormConf, TopologyContext context) {
@@ -228,8 +306,9 @@ public class DemoWordCountBenchmark {
             String word = tuple.getStringByField("word");
             String count = tuple.getIntegerByField("count").toString();
             Long time = tuple.getLongByField("time");
+            String windowId = tuple.getIntegerByField("windowId").toString();
             //HashMap<String, Integer> countMap = (HashMap<String,Integer>) tuple.getValueByField("countMap");
-            //System.out.println(word + ": " + count);
+            System.out.println("WINDOW " + windowId + "    " +  word + ": " + count);
             out.println(time);
             out.flush();
             //System.out.println("--- Word Count from task " + tuple.getIntegerByField("taskId") + ") ---");
@@ -245,7 +324,7 @@ public class DemoWordCountBenchmark {
 
     public static void main(String[] args) throws Exception {
 
-        int k = 1;
+        int k = 2;
 
         if (args.length >= 2) {
             k = Integer.parseInt(args[1]);
@@ -261,19 +340,19 @@ public class DemoWordCountBenchmark {
         /*
          * Spout
          */
-        builder.setSpout("spout", new WordSpout(), 2);
+        builder.setSpout("spout", new WordSpout(), NUM_SPOUTS);
 
         /*
          * First bolt
          */
-        CountingBolt bolt1 = new CountingBolt();
+        CountingBolt bolt1 = new CountingBolt(k);
         bolt1.setDeadTasks(0);
         builder.setBolt("bolt1", bolt1, COUNTING_BOLT_TASKS).customGrouping("spout", new KSafeFieldGrouping(k));
 
         /*
          * Second bolt
          */
-        builder.setBolt("bolt2", new DedupBolt(), 2).customGrouping("bolt1", new KSafeFieldGrouping(0));
+        builder.setBolt("bolt2", new DedupBolt(k), 1).customGrouping("bolt1", new KSafeFieldGrouping(0));
 
 
         Config conf = new Config();

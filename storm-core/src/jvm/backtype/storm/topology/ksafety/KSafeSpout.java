@@ -17,6 +17,7 @@ import java.util.Map;
 public abstract class KSafeSpout extends BaseRichSpout {
     private SpoutOutputCollector collector;
     private String id;
+    private long seqNum = 0;
 
     /**
      * Storm calls this method after this component is deployed on the cluster. User needs to implement openImpl instead
@@ -48,7 +49,10 @@ public abstract class KSafeSpout extends BaseRichSpout {
      * @param tuple the output tuple to emit
      */
     protected void emit(List<Object> tuple) {
-        tuple.add(new KSafeInfo(id));
+        KSafeInfo info = new KSafeInfo(id);
+        info.sequenceNumber = seqNum;
+        seqNum++;
+        tuple.add(info);
         this.collector.emit(tuple);
     }
 

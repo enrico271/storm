@@ -153,6 +153,16 @@ public class BenchmarkOursTopology {
 
     public static class DummyBolt extends KSafeBolt {
 
+        /**
+         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
+         * of this method.
+         *
+         * @param k
+         */
+        public DummyBolt(int k) {
+            super(k);
+        }
+
         @Override
         protected Fields declareOutputFieldsImpl() {
             return new Fields("id", "msg", "timestamp");
@@ -178,6 +188,16 @@ public class BenchmarkOursTopology {
         private int lastId = 0;
         private PrintWriter out = null;
         private static final int[] EXPECTED_TUPLES = new int[BANDWIDTHS.length];
+
+        /**
+         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
+         * of this method.
+         *
+         * @param k
+         */
+        public FinalBolt(int k) {
+            super(k);
+        }
 
         @Override
         protected void prepareImpl(Map stormConf, TopologyContext context) {
@@ -264,19 +284,20 @@ public class BenchmarkOursTopology {
         /*
          * Spout
          */
+        int k =1;
         builder.setSpout("spout", new Spout(), 1);
 
         /*
          * First bolt
          */
-        DummyBolt bolt1 = new DummyBolt();
+        DummyBolt bolt1 = new DummyBolt(k);
         builder.setBolt("bolt1", bolt1, 2).customGrouping("spout", new KSafeFieldGrouping(1));
         //builder.setBolt("bolt1", bolt1, 2).fieldsGrouping("spout", new Fields("msg"));
 
         /*
          * Second bolt
          */
-        builder.setBolt("bolt2", new FinalBolt(), 1).allGrouping("bolt1");
+        builder.setBolt("bolt2", new FinalBolt(k), 1).allGrouping("bolt1");
 
 
 

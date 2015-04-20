@@ -56,7 +56,7 @@ public class TridentTest {
   public static class PrintTuple extends BaseFilter {
       @Override
       public boolean isKeep(TridentTuple tuple) {
-          System.out.println(tuple);
+          //System.out.println(tuple);
           return true;
       }
   }
@@ -125,8 +125,8 @@ public class TridentTest {
     new Split(), new Fields("word")).groupBy(new Fields("word")).persistentAggregate(new MemoryMapState.Factory(), new Count(), new Fields("count"))
     .newValuesStream().each(new Fields("word", "count"), new PrintTuple());
     */
-      topology.newStream("spout1", spout).parallelismHint(4).groupBy(new Fields("word")).persistentAggregate(new MemoryMapState.Factory(), new Fields("word", "time"), new Count(), new Fields("count"))
-      .newValuesStream().each(new Fields("word", "count", "time"), new PrintTuple());
+      topology.newStream("spout1", spout).parallelismHint(4).groupBy(new Fields("word")).persistentAggregate(new MemoryMapState.Factory(), new Count(), new Fields("count")).parallelismHint(4)
+      .newValuesStream().each(new Fields("word", "count"), new PrintTuple()).parallelismHint(4);
 
       //groupBy(new Fields("word")).persistentAggregate(new MemoryMapState.Factory(),
            // new BetterCount(), new Fields("count")).parallelismHint(16);

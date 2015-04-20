@@ -29,10 +29,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 public class FixedBatchSpoutBenchmark implements IBatchSpout {
@@ -40,12 +37,16 @@ public class FixedBatchSpoutBenchmark implements IBatchSpout {
     Fields fields;
     List<Object>[] outputs;
     int maxBatchSize;
-    HashMap<Long, List<List<Object>>> batches = new HashMap<Long, List<List<Object>>>();
+    private String _text = null;
+    private Scanner _scan = null;
+    HashMap<Long, List<String>> batches = new HashMap<>();
     HashMap<Long, Long> timestamps = new HashMap<Long, Long>();
     private Socket socket;
     private BufferedReader in;
     private Socket socket2;
     private PrintWriter out;
+    private int stringSize = 256;
+    private String[] letters = new String[] {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t" ,"u" ,"v","w","x","y","z"};
 
 
     public FixedBatchSpoutBenchmark(Fields fields, int maxBatchSize, List<Object>... outputs) {
@@ -64,6 +65,20 @@ public class FixedBatchSpoutBenchmark implements IBatchSpout {
     @Override
     public void open(Map conf, TopologyContext context) {
         index = 0;
+        StringBuilder str = new StringBuilder();
+        for(int k =0; k < 10; k++) {
+            for (int i = 0; i < 26; i++) {
+                String curChar = letters[i];
+                str.append(curChar);
+                for (int j = 0; j < stringSize - 1; j++)
+                    str.append("a");
+                str.append(" ");
+            }
+        }
+        _text = str.toString();
+        _scan = new Scanner(_text);
+
+
         try {
             socket = new Socket("storm00", 2222);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -73,6 +88,8 @@ public class FixedBatchSpoutBenchmark implements IBatchSpout {
             socket2 = new Socket("storm00", 3333);
             out = new PrintWriter(socket2.getOutputStream(), true);
         } catch (IOException e) { e.printStackTrace(); }
+
+
     }
 
     @Override
@@ -90,19 +107,20 @@ public class FixedBatchSpoutBenchmark implements IBatchSpout {
         }
         catch (IOException e) { e.printStackTrace(); }
 
-        List<List<Object>> batch = this.batches.get(batchId);
+        List<String> batch = this.batches.get(batchId);
         if(batch == null){
-            batch = new ArrayList<List<Object>>();
-            for(int i=0; i < maxBatchSize; index++, i++) {
-                if(index>=outputs.length) {
-                    index = 0;
+            batch = new ArrayList<String>();
+            for(int i=0; i < maxBatchSize; i++) {
+                if(!_scan.hasNext()){
+                    _scan = new Scanner(_text);
                 }
-                batch.add(outputs[index]);
+
+                batch.add(_scan.next());
             }
             this.batches.put(batchId, batch);
         }
-        for(List<Object> list : batch){
-            collector.emit(new Values(time, list.get(0)));
+        for(String str : batch){
+            collector.emit(new Values(time, str));
         }
     }
 
@@ -110,10 +128,12 @@ public class FixedBatchSpoutBenchmark implements IBatchSpout {
     public void ack(long batchId) {
         //System.out.println("WE HAVE ACKED THE BATCH: " + Long.toString(batchId));
         this.batches.remove(batchId);
-        Long stamp = timestamps.get(batchId);
-        out.println(stamp);
-        out.flush();
-        timestamps.remove(batchId);
+        if(timestamps.containsKey(batchId)){
+            Long stamp = timestamps.get(batchId);
+            out.println(stamp);
+            out.flush();
+            timestamps.remove(batchId);
+        }
     }
 
     @Override

@@ -12,6 +12,7 @@ public final class KSafeUtils {
     public static String EXTRA_FIELD = "__pikachu";
 
     public static int chooseTask(List<Object> values, int numTasks) {
+        //System.out.println("HASH VALUE is " + Integer.toString((Math.abs(values.get(0).hashCode()) % numTasks)));
         return Math.abs(values.get(0).hashCode()) % numTasks;
     }
 }

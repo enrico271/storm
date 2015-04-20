@@ -102,6 +102,16 @@ public class DemoWordCount {
         private int _deadTasks = 0;
         private int _taskIndex;
 
+        /**
+         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
+         * of this method.
+         *
+         * @param k
+         */
+        public CountingBolt(int k) {
+            super(k);
+        }
+
         //private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
         //private boolean marked = false;
 
@@ -138,8 +148,10 @@ public class DemoWordCount {
                         countMap = new HashMap<>();
 
                     // Modify the state
-                    if (countMap.containsKey(word))
+                    if (countMap.containsKey(word)) {
+                        //System.out.println(word + ": " + countMap.get(word));
                         countMap.put(word, countMap.get(word) + 1);
+                    }
                     else
                         countMap.put(word, 1);
 
@@ -177,6 +189,16 @@ public class DemoWordCount {
     }
 
     public static class DedupBolt extends KSafeBolt {
+
+        /**
+         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
+         * of this method.
+         *
+         * @param k
+         */
+        public DedupBolt(int k) {
+            super(k);
+        }
 
         @Override
         protected void prepareImpl(Map stormConf, TopologyContext context) {
@@ -233,14 +255,14 @@ public class DemoWordCount {
         /*
          * First bolt
          */
-        CountingBolt bolt1 = new CountingBolt();
+        CountingBolt bolt1 = new CountingBolt(k);
         bolt1.setDeadTasks(0);
         builder.setBolt("bolt1", bolt1, COUNTING_BOLT_TASKS).customGrouping("spout", new KSafeFieldGrouping(k));
 
         /*
          * Second bolt
          */
-        builder.setBolt("bolt2", new DedupBolt(), 2).customGrouping("bolt1", new KSafeFieldGrouping(0));
+        builder.setBolt("bolt2", new DedupBolt(k), 2).customGrouping("bolt1", new KSafeFieldGrouping(0));
 
 
         Config conf = new Config();

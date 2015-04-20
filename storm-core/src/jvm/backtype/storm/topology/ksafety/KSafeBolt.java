@@ -19,10 +19,11 @@ import java.util.Map;
 public abstract class KSafeBolt extends BaseRichBolt {
 
     private OutputCollector collector;
-    private HashMap<String, HashMap<Integer, Long>> dedupMap = new HashMap<>();
+    private HashMap<String, HashMap<Integer, HashMap<Long, Integer>>> dedupMap = new HashMap<>();
     private HashMap<String, HashMap<Integer, Object>> states = new HashMap<>();
     private int numTasks = 0;
     private long seqNum = 0;
+    private int k = 1;
 
     /**
      * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
@@ -32,6 +33,11 @@ public abstract class KSafeBolt extends BaseRichBolt {
      * @param context This object can be used to get information about this task's place within the topology, including the task id and component id of this task, input and output information, etc.
      * @param collector The collector is used to emit tuples from this bolt. Tuples can be emitted at any time, including the prepare and cleanup methods. The collector is thread-safe and should be saved as an instance variable of this bolt object.
      */
+    public KSafeBolt(int k){
+        this.k = k;
+    }
+
+
     @Override
     public final void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
         this.collector = collector;
@@ -60,24 +66,30 @@ public abstract class KSafeBolt extends BaseRichBolt {
         if (!info.fromSpout) {
 
             if (!dedupMap.containsKey(info.spoutId))
-                dedupMap.put(info.spoutId, new HashMap<Integer, Long>());
+                dedupMap.put(info.spoutId, new HashMap<Integer, HashMap<Long,Integer>>());
 
-            HashMap<Integer, Long> taskToSeqNum = dedupMap.get(info.spoutId);
-
-            if (taskToSeqNum.containsKey(info.primaryTask)) {
-                long maxSeqNum = taskToSeqNum.get(info.primaryTask);
-                long thisSeqNum = info.sequenceNumber;
-
-                if (thisSeqNum <= maxSeqNum && maxSeqNum - thisSeqNum < Long.MAX_VALUE / 2)
-                    // Duplicate tuple, ignore
-                    return;
-                else
-                    // Not duplicate, update max sequence number
-                    taskToSeqNum.put(info.primaryTask, info.sequenceNumber);
+            HashMap<Integer, HashMap<Long,Integer>> taskToSeqNumMap = dedupMap.get(info.spoutId);
+            if(!taskToSeqNumMap.containsKey(info.primaryTask)){
+                taskToSeqNumMap.put(info.primaryTask, new HashMap<Long,Integer>());
             }
-            else
-                // Not duplicate, update max sequence number
-                taskToSeqNum.put(info.primaryTask, info.sequenceNumber);
+            HashMap<Long, Integer> seqNumMap = taskToSeqNumMap.get(info.primaryTask);
+            long thisSeqNum = info.sequenceNumber;
+
+            if (!seqNumMap.containsKey(thisSeqNum)) {
+                seqNumMap.put(thisSeqNum, 1);
+            }
+            else {
+                if(k > 0) {
+                    int numCopies = seqNumMap.get(thisSeqNum);
+                    if (numCopies == k) {
+                        seqNumMap.remove(thisSeqNum);
+                    } else {
+                        seqNumMap.put(thisSeqNum, numCopies + 1);
+                    }
+                    return;
+                }
+            }
+
         }
 
         executeImpl(input);
@@ -100,11 +112,12 @@ public abstract class KSafeBolt extends BaseRichBolt {
     protected final void emit(Tuple input, List<Object> output) {
         KSafeInfo info = (KSafeInfo) input.getValueByField(KSafeUtils.EXTRA_FIELD);
         info.primaryTask = KSafeUtils.chooseTask(input.getValues(), numTasks);
-        info.sequenceNumber = seqNum++;
+        //info.sequenceNumber = seqNum++;
         info.fromSpout = false;
         output.add(info);
         this.collector.emit(output);
     }
+
 
     /**
      * Storm calls this method to declare the output field names. User must implement declareOutputFieldsImpl
