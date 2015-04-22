@@ -78,6 +78,11 @@ public class DemoSocketTopology {
     }
 
     public static class DummyBolt extends KSafeBolt {
+
+        public DummyBolt(int k) {
+            super(k);
+        }
+
         @Override
         public Fields declareOutputFieldsImpl() {
             return new Fields("id", "msg", "timestamp");
@@ -93,9 +98,13 @@ public class DemoSocketTopology {
         }
     }
 
-    public static class DedupBolt extends KSafeBolt {
+    public static class FinalBolt extends KSafeBolt {
         private Socket socket;
         private PrintWriter out;
+
+        public FinalBolt(int k) {
+            super(k);
+        }
 
         @Override
         public void prepareImpl(Map stormConf, TopologyContext context) {
@@ -119,14 +128,47 @@ public class DemoSocketTopology {
     }
 
     public static void main(String[] args) throws Exception {
-        TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout("spout", new ServerSpout(), 2);
-        builder.setBolt("bolt1", new DummyBolt(), 4).customGrouping("spout", new KSafeFieldGrouping(1));
-        builder.setBolt("bolt2", new DedupBolt(), 2).fieldsGrouping("bolt1", new Fields("id"));
+        if (args.length < 4) {
+            System.out.println("-----------------------------------------------------------------------------");
+            System.out.println("Usage: DemoSocketTopology <topology_name> <k> <topology_structure>");
+            System.out.println("  topology_name: name to use when submitting this topology");
+            System.out.println("  k: how many k for k-safety");
+            System.out.println("  topology_structure: how many spouts, bolts, e.g.: \"1 2 1\" or \"2 4 6 8 2\"");
+            System.out.println("-----------------------------------------------------------------------------");
+            System.exit(1);
+        }
+
+        int k = Integer.parseInt(args[1]);
+
+        /*
+         * Spout
+         */
+        TopologyBuilder builder = new TopologyBuilder();
+        builder.setSpout("spout", new ServerSpout(), Integer.parseInt(args[2]));
+
+        /*
+         * Intermediate bolts
+         */
+        for (int i = 3; i < args.length - 1; i++) {
+            if (i - 3 <= 0)
+                builder.setBolt("bolt" + (i-2), new DummyBolt(k), Integer.parseInt(args[i])).customGrouping("spout", new KSafeFieldGrouping(k));
+            else
+                builder.setBolt("bolt" + (i-2), new DummyBolt(k), Integer.parseInt(args[i])).customGrouping("bolt" + (i-3), new KSafeFieldGrouping(k));
+        }
+
+        /*
+         * Final bolt
+         */
+        if (args.length - 4 <= 0)
+            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("spout", new KSafeFieldGrouping(k));
+        else
+            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("bolt" + (args.length - 4), new KSafeFieldGrouping(k));
+
 
         Config conf = new Config();
         conf.put(Config.TOPOLOGY_DEBUG, false);
+
 
         if (args != null && args.length > 0) {
             conf.setNumWorkers(3);

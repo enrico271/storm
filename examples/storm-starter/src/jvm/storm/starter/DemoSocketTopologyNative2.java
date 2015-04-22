@@ -99,7 +99,7 @@ public class DemoSocketTopologyNative2 {
         }
     }
 
-    public static class SecondBolt extends BaseRichBolt {
+    public static class FinalBolt extends BaseRichBolt {
         private Socket socket;
         private PrintWriter out;
         OutputCollector _collector;
@@ -127,11 +127,17 @@ public class DemoSocketTopologyNative2 {
     }
 
     public static void main(String[] args) throws Exception {
+
+        if (args.length != 4) {
+            System.out.println("Usage: DemoSocketTopologyNative2 <topology_name> <#spouts> <#bolt1s> <#bolt2s");
+            System.exit(1);
+        }
+
         TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout("spout", new ServerSpout(), 1);
-        builder.setBolt("bolt1", new DummyBolt(), 2).fieldsGrouping("spout", new Fields("id"));
-        builder.setBolt("bolt2", new SecondBolt(), 1).allGrouping("bolt1");
+        builder.setSpout("spout", new ServerSpout(), Integer.parseInt(args[1]));
+        builder.setBolt("bolt1", new DummyBolt(), Integer.parseInt(args[2])).fieldsGrouping("spout", new Fields("id"));
+        builder.setBolt("bolt2", new FinalBolt(), Integer.parseInt(args[3])).allGrouping("bolt1");
 
         Config conf = new Config();
         conf.put(Config.TOPOLOGY_DEBUG, false);

@@ -100,7 +100,7 @@ public class DemoSocketTopologyNative {
         }
     }
 
-    public static class SecondBolt extends BaseRichBolt {
+    public static class FinalBolt extends BaseRichBolt {
         private Socket socket;
         private PrintWriter out;
         OutputCollector _collector;
@@ -129,11 +129,39 @@ public class DemoSocketTopologyNative {
     }
 
     public static void main(String[] args) throws Exception {
-        TopologyBuilder builder = new TopologyBuilder();
 
-        builder.setSpout("spout", new ServerSpout(), 1);
-        builder.setBolt("bolt1", new DummyBolt(), 2).fieldsGrouping("spout", new Fields("id"));
-        builder.setBolt("bolt2", new SecondBolt(), 1).allGrouping("bolt1");
+        if (args.length < 3) {
+            System.out.println("-----------------------------------------------------------------------------");
+            System.out.println("Usage: DemoSocketTopologyNative <topology_name> <topology_structure>");
+            System.out.println("  topology_name: name to use when submitting this topology");
+            System.out.println("  topology_structure: how many spouts, bolts, e.g.: \"1 2 1\" or \"2 4 6 8 2\"");
+            System.out.println("-----------------------------------------------------------------------------");
+            System.exit(1);
+        }
+
+        /*
+         * Spout
+         */
+        TopologyBuilder builder = new TopologyBuilder();
+        builder.setSpout("spout", new ServerSpout(), Integer.parseInt(args[1]));
+
+        /*
+         * Intermediate bolts
+         */
+        for (int i = 2; i < args.length - 1; i++) {
+            if (i - 2 <= 0)
+                builder.setBolt("bolt" + (i-1), new DummyBolt(), Integer.parseInt(args[i])).fieldsGrouping("spout", new Fields("id"));
+            else
+                builder.setBolt("bolt" + (i-1), new DummyBolt(), Integer.parseInt(args[i])).fieldsGrouping("bolt" + (i - 2), new Fields("id"));
+        }
+
+        /*
+         * Final bolt
+         */
+        if (args.length - 3 <= 0)
+            builder.setBolt("bolt" + (args.length - 2), new FinalBolt(), Integer.parseInt(args[args.length - 1])).fieldsGrouping("spout", new Fields("id"));
+        else
+            builder.setBolt("bolt" + (args.length - 2), new FinalBolt(), Integer.parseInt(args[args.length - 1])).fieldsGrouping("bolt" + (args.length - 3), new Fields("id"));
 
         Config conf = new Config();
         conf.put(Config.TOPOLOGY_DEBUG, false);
