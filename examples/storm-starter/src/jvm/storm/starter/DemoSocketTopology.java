@@ -161,9 +161,9 @@ public class DemoSocketTopology {
          * Final bolt
          */
         if (args.length - 4 <= 0)
-            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("spout", new KSafeFieldGrouping(k));
+            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("spout", new KSafeFieldGrouping(0));
         else
-            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("bolt" + (args.length - 4), new KSafeFieldGrouping(k));
+            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("bolt" + (args.length - 4), new KSafeFieldGrouping(0));
 
 
         Config conf = new Config();
@@ -171,7 +171,7 @@ public class DemoSocketTopology {
 
 
         if (args != null && args.length > 0) {
-            conf.setNumWorkers(3);
+            conf.setNumWorkers(24);
             StormSubmitter.submitTopologyWithProgressBar(args[0], conf, builder.createTopology());
         } else {
             conf.setMaxTaskParallelism(3);

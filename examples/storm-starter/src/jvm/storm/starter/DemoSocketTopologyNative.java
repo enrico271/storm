@@ -167,7 +167,7 @@ public class DemoSocketTopologyNative {
         conf.put(Config.TOPOLOGY_DEBUG, false);
 
         if (args != null && args.length > 0) {
-            conf.setNumWorkers(3);
+            conf.setNumWorkers(24);
             StormSubmitter.submitTopologyWithProgressBar(args[0], conf, builder.createTopology());
         } else {
             conf.setMaxTaskParallelism(3);
