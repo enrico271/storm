@@ -79,10 +79,6 @@ public class DemoSocketTopology {
 
     public static class DummyBolt extends KSafeBolt {
 
-        public DummyBolt(int k) {
-            super(k);
-        }
-
         @Override
         public Fields declareOutputFieldsImpl() {
             return new Fields("id", "msg", "timestamp");
@@ -101,10 +97,6 @@ public class DemoSocketTopology {
     public static class FinalBolt extends KSafeBolt {
         private Socket socket;
         private PrintWriter out;
-
-        public FinalBolt(int k) {
-            super(k);
-        }
 
         @Override
         public void prepareImpl(Map stormConf, TopologyContext context) {
@@ -152,18 +144,18 @@ public class DemoSocketTopology {
          */
         for (int i = 3; i < args.length - 1; i++) {
             if (i - 3 <= 0)
-                builder.setBolt("bolt" + (i-2), new DummyBolt(k), Integer.parseInt(args[i])).customGrouping("spout", new KSafeFieldGrouping(k));
+                builder.setBolt("bolt" + (i-2), new DummyBolt(), Integer.parseInt(args[i])).customGrouping("spout", new KSafeFieldGrouping(k));
             else
-                builder.setBolt("bolt" + (i-2), new DummyBolt(k), Integer.parseInt(args[i])).customGrouping("bolt" + (i-3), new KSafeFieldGrouping(k));
+                builder.setBolt("bolt" + (i-2), new DummyBolt(), Integer.parseInt(args[i])).customGrouping("bolt" + (i-3), new KSafeFieldGrouping(k));
         }
 
         /*
          * Final bolt
          */
         if (args.length - 4 <= 0)
-            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("spout", new KSafeFieldGrouping(0));
+            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(), Integer.parseInt(args[args.length - 1])).customGrouping("spout", new KSafeFieldGrouping(0));
         else
-            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(k), Integer.parseInt(args[args.length - 1])).customGrouping("bolt" + (args.length - 4), new KSafeFieldGrouping(0));
+            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(), Integer.parseInt(args[args.length - 1])).customGrouping("bolt" + (args.length - 4), new KSafeFieldGrouping(0));
 
 
         Config conf = new Config();

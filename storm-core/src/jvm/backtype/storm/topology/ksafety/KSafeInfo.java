@@ -15,8 +15,9 @@ public class KSafeInfo {
     @SuppressWarnings("unused")
     private KSafeInfo() {} // Kryo needs this
 
-    public KSafeInfo(String spoutId) {
+    public KSafeInfo(String spoutId, long sequenceNumber) {
         this.spoutId = spoutId;
+        this.sequenceNumber = sequenceNumber;
         this.fromSpout = true;
     }
 }

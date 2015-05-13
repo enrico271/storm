@@ -157,7 +157,7 @@ topology.environment: null
 dev.zookeeper.path: "/tmp/dev-storm-zookeeper"
 
 ## Use our scheduler
-storm.scheduler: "storm.MyScheduler"
+storm.scheduler: "storm.KSafeScheduler"
 
 ## List of custom serializations
 topology.kryo.register:

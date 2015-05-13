@@ -37,13 +37,13 @@ import java.util.Scanner;
 /**
  * This topology demonstrates Storm's stream groupings and multilang capabilities.
  */
-public class DemoWordCount {
-
-    private static final int COUNTING_BOLT_TASKS = 2;
+public class KSafeWordCount {
 
     private static final int TYPE_WORD = 0;
     private static final int TYPE_EOF = 1;
     private static final int TYPE_MARK = 2;
+
+    private static final int COUNTING_BOLT_TASKS = 2;
 
     public static class WordSpout extends KSafeSpout {
         private String _text = null;
@@ -101,16 +101,6 @@ public class DemoWordCount {
 
         private int _deadTasks = 0;
         private int _taskIndex;
-
-        /**
-         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
-         * of this method.
-         *
-         * @param k
-         */
-        public CountingBolt(int k) {
-            super(k);
-        }
 
         //private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
         //private boolean marked = false;
@@ -190,16 +180,6 @@ public class DemoWordCount {
 
     public static class DedupBolt extends KSafeBolt {
 
-        /**
-         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
-         * of this method.
-         *
-         * @param k
-         */
-        public DedupBolt(int k) {
-            super(k);
-        }
-
         @Override
         protected void prepareImpl(Map stormConf, TopologyContext context) {
             new Thread() {
@@ -236,12 +216,12 @@ public class DemoWordCount {
 
         int k = 1;
 
-        if (args.length >= 1) {
-            k = Integer.parseInt(args[0]);
-            org.apache.log4j.Logger.getLogger(DemoWordCount.class).info("Hello world! Starting topology with k = " + k);
+        if (args.length > 1) {
+            k = Integer.parseInt(args[1]);
+            org.apache.log4j.Logger.getLogger(KSafeWordCount.class).info("Hello world! Starting topology with k = " + k);
         }
         else {
-            org.apache.log4j.Logger.getLogger(DemoWordCount.class).info("Hello world! No argument is found. Starting topology with k = " + k);
+            org.apache.log4j.Logger.getLogger(KSafeWordCount.class).info("Hello world! No argument is found. Starting topology with k = " + k);
         }
 
 
@@ -250,19 +230,19 @@ public class DemoWordCount {
         /*
          * Spout
          */
-        builder.setSpout("spout", new WordSpout(), 2);
+        builder.setSpout("spout", new WordSpout(), 1);
 
         /*
          * First bolt
          */
-        CountingBolt bolt1 = new CountingBolt(k);
+        CountingBolt bolt1 = new CountingBolt();
         bolt1.setDeadTasks(0);
         builder.setBolt("bolt1", bolt1, COUNTING_BOLT_TASKS).customGrouping("spout", new KSafeFieldGrouping(k));
 
         /*
          * Second bolt
          */
-        builder.setBolt("bolt2", new DedupBolt(k), 2).customGrouping("bolt1", new KSafeFieldGrouping(0));
+        builder.setBolt("bolt2", new DedupBolt(), 1).customGrouping("bolt1", new KSafeFieldGrouping(0));
 
 
         Config conf = new Config();

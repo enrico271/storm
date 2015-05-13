@@ -11,7 +11,7 @@ import backtype.storm.scheduler.Topologies;
 import backtype.storm.scheduler.TopologyDetails;
 import backtype.storm.scheduler.WorkerSlot;
 
-public class MyScheduler implements IScheduler {
+public class KSafeScheduler implements IScheduler {
 
     private static org.apache.log4j.Logger LOG;
 
@@ -19,10 +19,10 @@ public class MyScheduler implements IScheduler {
 
     public void prepare(Map conf) {}
 
-    public MyScheduler()
+    public KSafeScheduler()
     {
         super();
-        LOG = org.apache.log4j.Logger.getLogger(MyScheduler.class);
+        LOG = org.apache.log4j.Logger.getLogger(KSafeScheduler.class);
         LOG.info("Hello MyScheduler!");
     }
 

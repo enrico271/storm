@@ -153,16 +153,6 @@ public class DemoWordCountBenchmark {
         private HashMap<Integer, HashMap<String,Integer>> countMaps;
         private int count;
 
-        /**
-         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
-         * of this method.
-         *
-         * @param k
-         */
-        public CountingBolt(int k) {
-            super(k);
-        }
-
         //private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
         //private boolean marked = false;
 
@@ -281,16 +271,6 @@ public class DemoWordCountBenchmark {
         private PrintWriter out;
         private int count;
 
-        /**
-         * Storm calls this method after this component is deployed on the cluster. User needs to implement prepareImpl instead
-         * of this method.
-         *
-         * @param k
-         */
-        public DedupBolt(int k) {
-            super(k);
-        }
-
         @Override
         protected void prepareImpl(Map stormConf, TopologyContext context) {
             try {
@@ -345,14 +325,14 @@ public class DemoWordCountBenchmark {
         /*
          * First bolt
          */
-        CountingBolt bolt1 = new CountingBolt(k);
+        CountingBolt bolt1 = new CountingBolt();
         bolt1.setDeadTasks(0);
         builder.setBolt("bolt1", bolt1, COUNTING_BOLT_TASKS).customGrouping("spout", new KSafeFieldGrouping(k));
 
         /*
          * Second bolt
          */
-        builder.setBolt("bolt2", new DedupBolt(k), 1).customGrouping("bolt1", new KSafeFieldGrouping(0));
+        builder.setBolt("bolt2", new DedupBolt(), 1).customGrouping("bolt1", new KSafeFieldGrouping(0));
 
 
         Config conf = new Config();
