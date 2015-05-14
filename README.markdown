@@ -26,16 +26,29 @@ This repository contains a *k*-safe version of Storm that allows *k* machine fai
     > **Note:**
     > This script will call `stormdistribute` in the cluster, which is a script that helps distributing Storm to all of the machines.
 
+
+----------
+
 ###Running an example program
+
+We will run a simple word count topology to test whether *k*-safety is working. The topology looks like the following figure:
+```
+Figure 1. A simple topology
+
+       /--- bolt1 ---\
+      /               \
+spout                  bolt2
+      \               /
+       \--- bolt1 ---/
+```
+With this topology, we can test *k*-safety with *k*=1. That is, if we shut down one of the two `bolt1`s, the topology should still be running normally because *k*=1 should tolerate one machine failure. The source (`spout`) and the final node (`bolt2`) are single points of failure. However, they can be made *k*-safe too. For the sake of this discussion, we assume that they are always up to make this tutorial simpler.
 
 1. First, SSH to the cluster:
     ```
     ./storm/scripts/ssh.sh
     ```
 
-2. Let's run a word count topology to test if *k*-safety is working, but before that, let's make sure that we are using the correct scheduler.
-
-    Open the Storm UI by entering this address in your browser:
+2. Let's make sure that we are using the correct scheduler. Open the Storm UI by entering this address in your browser:
     ```
     http://localhost:9999/
     ```
@@ -89,3 +102,32 @@ This repository contains a *k*-safe version of Storm that allows *k* machine fai
 7. Now, locate the machines that contain `bolt1` using `loc` again. You can shut down one of these machines, and the output should not change. It shows that *k*-safety is working correctly. Awesome!
 
 8. You can repeat this experiment with *k*=0, and you can see that the output will no longer be correct if you shut down a machine.
+
+
+----------
+
+###Running the benchmark
+>**TODO:** Explain how to change the scheduler to MyCombinedScheduler. Probably give this scheduler a better name as well.
+
+1. SSH to `storm00` and go to the home directory.
+2. We have provided a script to conveniently run the benchmark. To use the script, use this command:
+    ```
+    ./benchmark.sh <class name> <topology name> <topology arguments ...>
+    ```
+    - `<class name>`: the system that we want to benchmark. It should be one of these three:
+        - `storm.starter.BenchmarkKsafe`
+        - `storm.starter.BenchmarkStormWithAcking`
+        - `storm.starter.BenchmarkStormWithoutAcking`
+    
+    - `<topology name>`: the name of the topology to display in the Storm UI. If the topology name is `storm`, our scheduler will switch back to the Storm default scheduler.
+    - `<topology arguments ...>`: the arguments that will be used to structure the topology.
+        - For `BenchmarkKsafe`, the first argument is *k*, the rest is topology structure.
+        - For `BenchmarkStormWithAcking` and `BenchmarkStormWithoutAcking`, all arguments are the topology structure.
+
+        For example, to run `BenchmarkKsafe` with the topology pictured in Figure 1 above and *k*=1, run this command:
+        ```
+        ./benchmark.sh storm.starter.BenchmarkKsafe ksafe 1 1 2 1
+        ```
+    The first argument is `1` to set *k*=1, the rest is `1 2 1`, which says we want 1 spout, 2 middle bolts, and 1 final bolt.
+    > **Note:**
+    > We can make the topology as long as we want. For example, the argument `2 2 4 5 6 2 1` is also valid.

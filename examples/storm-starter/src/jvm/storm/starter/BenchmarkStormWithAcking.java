@@ -39,9 +39,9 @@ import java.net.Socket;
 import java.util.Map;
 
 /**
- * Read input from socket, and output final result to socket, without k-safety and without acking.
+ * Read input from socket, and output final result to socket, without k-safety but with acking.
  */
-public class DemoSocketTopologyNative2 {
+public class BenchmarkStormWithAcking {
     public static class ServerSpout extends BaseRichSpout {
         SpoutOutputCollector _collector;
         private int count = 0;
@@ -69,7 +69,7 @@ public class DemoSocketTopologyNative2 {
                 String msg = in.readLine();
                 if (msg != null) {
                     Long time = Long.parseLong(msg.substring(0, 13));
-                    _collector.emit(new Values(count++, largeString, time));
+                    _collector.emit(new Values(count++, largeString, time), count);
                 }
             }
             catch (IOException e) { e.printStackTrace(); }
@@ -95,7 +95,8 @@ public class DemoSocketTopologyNative2 {
 
         @Override
         public void execute(Tuple input) {
-            _collector.emit(new Values(input.getIntegerByField("id"), input.getStringByField("msg"), input.getLongByField("timestamp")));
+            _collector.emit(input, new Values(input.getIntegerByField("id"), input.getStringByField("msg"), input.getLongByField("timestamp")));
+            _collector.ack(input);
         }
     }
 
@@ -118,6 +119,7 @@ public class DemoSocketTopologyNative2 {
             long stamp = tuple.getLongByField("timestamp");
             out.println(stamp);
             out.flush();
+            _collector.ack(tuple);
         }
 
         @Override
@@ -130,7 +132,7 @@ public class DemoSocketTopologyNative2 {
 
         if (args.length < 3) {
             System.out.println("-----------------------------------------------------------------------------");
-            System.out.println("Usage: DemoSocketTopologyNative2 <topology_name> <topology_structure>");
+            System.out.println("Usage: <topology_name> <topology_structure>");
             System.out.println("  topology_name: name to use when submitting this topology");
             System.out.println("  topology_structure: how many spouts, bolts, e.g.: \"1 2 1\" or \"2 4 6 8 2\"");
             System.out.println("-----------------------------------------------------------------------------");

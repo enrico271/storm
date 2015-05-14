@@ -20,11 +20,13 @@ package storm.starter;
 import backtype.storm.Config;
 import backtype.storm.LocalCluster;
 import backtype.storm.StormSubmitter;
-import backtype.storm.grouping.ksafety.KSafeFieldGrouping;
+import backtype.storm.spout.SpoutOutputCollector;
+import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
+import backtype.storm.topology.OutputFieldsDeclarer;
 import backtype.storm.topology.TopologyBuilder;
-import backtype.storm.topology.ksafety.KSafeBolt;
-import backtype.storm.topology.ksafety.KSafeSpout;
+import backtype.storm.topology.base.BaseRichBolt;
+import backtype.storm.topology.base.BaseRichSpout;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 import backtype.storm.tuple.Values;
@@ -37,18 +39,20 @@ import java.net.Socket;
 import java.util.Map;
 
 /**
- * Read input from socket, and output final result to socket, with k-safety.
+ * Read input from socket, and output final result to socket, without k-safety and without acking.
  */
-public class DemoSocketTopology {
-    public static class ServerSpout extends KSafeSpout {
+public class BenchmarkStormWithoutAcking {
+    public static class ServerSpout extends BaseRichSpout {
+        SpoutOutputCollector _collector;
         private int count = 0;
         private String largeString = null;
         private int stringSize = 256;
         private Socket socket;
         private BufferedReader in;
 
-        @Override
-        public void openImpl(Map conf, TopologyContext context) {
+        public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
+            _collector = collector;
+
             StringBuilder str = new StringBuilder();
             for (int i = 0; i < stringSize; i++)
                 str.append('a');
@@ -65,41 +69,44 @@ public class DemoSocketTopology {
                 String msg = in.readLine();
                 if (msg != null) {
                     Long time = Long.parseLong(msg.substring(0, 13));
-                    emit(new Values(count++, largeString, time));
+                    _collector.emit(new Values(count++, largeString, time));
                 }
             }
             catch (IOException e) { e.printStackTrace(); }
         }
 
-        @Override
-        public Fields declareOutputFieldsImpl() {
-            return new Fields("id", "msg", "timestamp");
+        public void declareOutputFields(OutputFieldsDeclarer declarer) {
+            declarer.declare(new Fields("id", "msg", "timestamp"));
         }
     }
 
-    public static class DummyBolt extends KSafeBolt {
+    public static class DummyBolt extends BaseRichBolt {
+        OutputCollector _collector;
 
         @Override
-        public Fields declareOutputFieldsImpl() {
-            return new Fields("id", "msg", "timestamp");
+        public void declareOutputFields(OutputFieldsDeclarer declarer) {
+            declarer.declare(new Fields("id", "msg", "timestamp"));
         }
 
         @Override
-        public void prepareImpl(Map stormConf, TopologyContext context) {
+        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+            _collector = collector;
         }
 
         @Override
-        public void executeImpl(Tuple input) {
-            emit(input, new Values(input.getIntegerByField("id"), input.getStringByField("msg"), input.getLongByField("timestamp")));
+        public void execute(Tuple input) {
+            _collector.emit(new Values(input.getIntegerByField("id"), input.getStringByField("msg"), input.getLongByField("timestamp")));
         }
     }
 
-    public static class FinalBolt extends KSafeBolt {
+    public static class FinalBolt extends BaseRichBolt {
         private Socket socket;
         private PrintWriter out;
+        OutputCollector _collector;
 
         @Override
-        public void prepareImpl(Map stormConf, TopologyContext context) {
+        public void prepare(Map stormConf, TopologyContext context, OutputCollector collector) {
+            _collector = collector;
             try {
                 socket = new Socket("storm00", 3333);
                 out = new PrintWriter(socket.getOutputStream(), true);
@@ -107,60 +114,55 @@ public class DemoSocketTopology {
         }
 
         @Override
-        public void executeImpl(Tuple tuple) {
+        public void execute(Tuple tuple) {
             long stamp = tuple.getLongByField("timestamp");
             out.println(stamp);
             out.flush();
         }
 
         @Override
-        public Fields declareOutputFieldsImpl() {
-            return new Fields("id");
+        public void declareOutputFields(OutputFieldsDeclarer declarer) {
+            declarer.declare(new Fields("id"));
         }
     }
 
     public static void main(String[] args) throws Exception {
 
-        if (args.length < 4) {
+        if (args.length < 3) {
             System.out.println("-----------------------------------------------------------------------------");
-            System.out.println("Usage: DemoSocketTopology <topology_name> <k> <topology_structure>");
+            System.out.println("Usage: <topology_name> <topology_structure>");
             System.out.println("  topology_name: name to use when submitting this topology");
-            System.out.println("  k: how many k for k-safety");
             System.out.println("  topology_structure: how many spouts, bolts, e.g.: \"1 2 1\" or \"2 4 6 8 2\"");
             System.out.println("-----------------------------------------------------------------------------");
             System.exit(1);
         }
 
-        int k = Integer.parseInt(args[1]);
-
         /*
          * Spout
          */
         TopologyBuilder builder = new TopologyBuilder();
-        builder.setSpout("spout", new ServerSpout(), Integer.parseInt(args[2]));
+        builder.setSpout("spout", new ServerSpout(), Integer.parseInt(args[1]));
 
         /*
          * Intermediate bolts
          */
-        for (int i = 3; i < args.length - 1; i++) {
-            if (i - 3 <= 0)
-                builder.setBolt("bolt" + (i-2), new DummyBolt(), Integer.parseInt(args[i])).customGrouping("spout", new KSafeFieldGrouping(k));
+        for (int i = 2; i < args.length - 1; i++) {
+            if (i - 2 <= 0)
+                builder.setBolt("bolt" + (i-1), new DummyBolt(), Integer.parseInt(args[i])).fieldsGrouping("spout", new Fields("id"));
             else
-                builder.setBolt("bolt" + (i-2), new DummyBolt(), Integer.parseInt(args[i])).customGrouping("bolt" + (i-3), new KSafeFieldGrouping(k));
+                builder.setBolt("bolt" + (i-1), new DummyBolt(), Integer.parseInt(args[i])).fieldsGrouping("bolt" + (i - 2), new Fields("id"));
         }
 
         /*
          * Final bolt
          */
-        if (args.length - 4 <= 0)
-            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(), Integer.parseInt(args[args.length - 1])).customGrouping("spout", new KSafeFieldGrouping(0));
+        if (args.length - 3 <= 0)
+            builder.setBolt("bolt" + (args.length - 2), new FinalBolt(), Integer.parseInt(args[args.length - 1])).fieldsGrouping("spout", new Fields("id"));
         else
-            builder.setBolt("bolt" + (args.length - 3), new FinalBolt(), Integer.parseInt(args[args.length - 1])).customGrouping("bolt" + (args.length - 4), new KSafeFieldGrouping(0));
-
+            builder.setBolt("bolt" + (args.length - 2), new FinalBolt(), Integer.parseInt(args[args.length - 1])).fieldsGrouping("bolt" + (args.length - 3), new Fields("id"));
 
         Config conf = new Config();
         conf.put(Config.TOPOLOGY_DEBUG, false);
-
 
         if (args != null && args.length > 0) {
             conf.setNumWorkers(24);
