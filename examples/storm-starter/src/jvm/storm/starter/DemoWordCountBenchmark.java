@@ -223,19 +223,21 @@ public class DemoWordCountBenchmark {
                     break;
 
                 case TYPE_EOF:
+                    int numAcks;
                     if(!acks.containsKey(windowId)){
                         acks.put(windowId, 1);
+                        numAcks = 1;
                     }
-                    else{
-                        int numAcks = acks.get(windowId) + 1;
-                        if(numAcks == NUM_SPOUTS){
-                            acks.remove(windowId);
-                            countMaps.put(windowId, new HashMap<String, Integer>());
-                            setState(input, "countMap", countMaps);
-                            marks.remove(windowId);
-                        }else{
-                            acks.put(windowId, numAcks);
-                        }
+                    else {
+                        numAcks = acks.get(windowId) + 1;
+                    }
+                    if(numAcks == NUM_SPOUTS){
+                        acks.remove(windowId);
+                        countMaps.remove(windowId);
+                        setState(input, "countMap", countMaps);
+                        marks.remove(windowId);
+                    }else{
+                        acks.put(windowId, numAcks);
                     }
 
                     //if (marked != null && marked) {

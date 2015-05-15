@@ -44,11 +44,13 @@ public class KSafeWordCount {
     private static final int TYPE_MARK = 2;
 
     private static final int COUNTING_BOLT_TASKS = 2;
+    private static final int NUM_SPOUTS = 2;
 
     public static class WordSpout extends KSafeSpout {
         private String _text = null;
         private Scanner _scan = null;
         private boolean markSent = false;
+        private int window = 0;
 
         @Override
         public void openImpl(Map conf, TopologyContext context) {
@@ -73,26 +75,27 @@ public class KSafeWordCount {
 
             if (!markSent) {
                 // WARNING: This is a hack to send mark to all tasks
-                for (int i = 0; i < COUNTING_BOLT_TASKS; i++)
-                    emit(new Values("" + i, TYPE_MARK));
+                for (int i = 0; i < COUNTING_BOLT_TASKS; i+=1)
+                    emit(new Values("" + i, TYPE_MARK, window));
 
                 markSent = true;
             }
             else if (_scan.hasNext())
-                emit(new Values(_scan.next(), TYPE_WORD));
+                emit(new Values(_scan.next(), TYPE_WORD, window));
             else {
                 // WARNING: This is a hack to send EOF to all tasks
-                for (int i = 0; i < COUNTING_BOLT_TASKS; i++)
-                    emit(new Values("" + i, TYPE_EOF));
+                for (int i = 0; i < COUNTING_BOLT_TASKS; i+=1)
+                    emit(new Values("" + i, TYPE_EOF, window));
 
                 _scan = new Scanner(_text);
+                window++;
                 markSent = false;
             }
         }
 
         @Override
         public Fields declareOutputFieldsImpl() {
-            return new Fields("word", "type");
+            return new Fields("word", "type", "windowId");
         }
 
     }
@@ -101,18 +104,25 @@ public class KSafeWordCount {
 
         private int _deadTasks = 0;
         private int _taskIndex;
+        private HashMap<Integer, Integer> marks;
+        private HashMap<Integer,Integer> acks;
+        private HashMap<Integer, HashMap<String,Integer>> countMaps;
+        private int count;
+
 
         //private HashMap<String, Integer> _countMap = new HashMap<String, Integer>();
         //private boolean marked = false;
 
         @Override
         public Fields declareOutputFieldsImpl() {
-            return new Fields("countMap", "taskId");
+            return new Fields("countMap", "taskId", "windowId");
         }
 
         @Override
         public void prepareImpl(Map stormConf, TopologyContext context) {
             _taskIndex = context.getThisTaskIndex();
+            acks = new HashMap<>();
+            marks = new HashMap<>();
             System.out.println("SETTING TASK " + _taskIndex);
         }
 
@@ -126,44 +136,89 @@ public class KSafeWordCount {
 
             int type = input.getIntegerByField("type");
             String word = input.getStringByField("word");
+            int windowId = input.getIntegerByField("windowId");
+            marks = (HashMap<Integer, Integer>) getState(input, "marks");
+            if(marks == null){
+                marks = new HashMap<Integer, Integer>();
+                setState(input,"marks",marks);
+            }
+            acks =  (HashMap<Integer, Integer>) getState(input, "acks");
+            if(acks == null){
+                acks = new HashMap<Integer, Integer>();
+                setState(input,"acks",acks);
+            }
+
+            HashMap<Integer, HashMap<String,Integer>> countMaps = (HashMap<Integer, HashMap<String,Integer>>) getState(input, "countMap");
+            if (countMaps == null)
+                countMaps = new HashMap<>();
 
             switch (type) {
 
                 case TYPE_WORD:
-
+                    int count;
                     // Get the state
-                    @SuppressWarnings("unchecked")
-                    HashMap<String, Integer> countMap = (HashMap<String, Integer>) getState(input, "countMap");
-                    if (countMap == null)
-                        countMap = new HashMap<>();
+
+                    if(!(countMaps.containsKey(windowId))){
+                        countMaps.put(windowId, new HashMap<String, Integer>());
+                    }
+                    HashMap<String, Integer> countMap = countMaps.get(windowId);
+
 
                     // Modify the state
                     if (countMap.containsKey(word)) {
-                        //System.out.println(word + ": " + countMap.get(word));
-                        countMap.put(word, countMap.get(word) + 1);
+                        count = countMap.get(word) + 1;
+                        countMap.put(word, count);
                     }
-                    else
+                    else {
+                        count = 1;
                         countMap.put(word, 1);
+                    }
+
 
                     // Save the state
-                    setState(input, "countMap", countMap);
 
+                    setState(input, "countMap", countMaps);
                     break;
 
                 case TYPE_EOF:
-                    Boolean marked = (Boolean) getState(input, "marked");
-
-                    if (marked != null && marked) {
-                        emit(input, new Values(getState(input, "countMap"), _taskIndex));
+                    int numAcks;
+                    if(!acks.containsKey(windowId)){
+                        acks.put(windowId, 1);
+                        numAcks = 1;
                     }
-                    setState(input, "countMap", new HashMap<String, Integer>());
+                    else {
+                        numAcks = acks.get(windowId) + 1;
+                    }
+                    if(numAcks == NUM_SPOUTS){
+                        acks.remove(windowId);
+                        emit(input, new Values(countMaps.get(windowId), _taskIndex,windowId));
+                        countMaps.remove(windowId);
+                        setState(input, "countMap", countMaps);
+                        marks.remove(windowId);
+                    }else{
+                        acks.put(windowId, numAcks);
+                    }
+                    setState(input,"acks",acks);
+                    setState(input,"marks",marks);
 
-                    setState(input, "marked", false);
+
+                    //if (marked != null && marked) {
+                    // emit(input, new Values(getState(input, "countMap"), _taskIndex));
+                    //setState(input, "countMap", new HashMap<String, Integer>());
+                    //}
+
+                    //setState(input, "countMap", new HashMap<String, Integer>());
+                    //setState(input, "marked", false);
 
                     break;
 
                 case TYPE_MARK:
-                    setState(input, "marked", true);
+                    if(!marks.containsKey(windowId)){
+                        marks.put(windowId, 1);
+                    }else{
+                        marks.put(windowId, marks.get(windowId) + 1);
+                    }
+                    setState(input,"marks",marks);
                     break;
 
                 default:
@@ -198,8 +253,9 @@ public class KSafeWordCount {
 
             @SuppressWarnings("unchecked")
             HashMap<String, Integer> countMap = (HashMap<String,Integer>) tuple.getValueByField("countMap");
+            int windowId = tuple.getIntegerByField("windowId");
 
-            System.out.println("--- Word Count from task " + tuple.getIntegerByField("taskId") + ") ---");
+            System.out.println("--- Word Count in window " + Integer.toString(windowId) + " from task " + tuple.getIntegerByField("taskId") + ") ---");
             for (String s : countMap.keySet())
                 System.out.println(s + ": " + countMap.get(s));
         }
@@ -230,7 +286,7 @@ public class KSafeWordCount {
         /*
          * Spout
          */
-        builder.setSpout("spout", new WordSpout(), 1);
+        builder.setSpout("spout", new WordSpout(), NUM_SPOUTS);
 
         /*
          * First bolt
