@@ -44,7 +44,7 @@ public class KSafeWordCount {
     private static final int TYPE_MARK = 2;
 
     private static final int COUNTING_BOLT_TASKS = 2;
-    private static final int NUM_SPOUTS = 2;
+    private static final int NUM_SPOUTS = 1;
 
     public static class WordSpout extends KSafeSpout {
         private String _text = null;
@@ -191,10 +191,16 @@ public class KSafeWordCount {
                     }
                     if(numAcks == NUM_SPOUTS){
                         acks.remove(windowId);
-                        emit(input, new Values(countMaps.get(windowId), _taskIndex,windowId));
-                        countMaps.remove(windowId);
+                        if(marks.containsKey(windowId)){
+                            if(marks.get(windowId) == NUM_SPOUTS){
+                                emit(input, new Values(countMaps.get(windowId), _taskIndex,windowId));
+                            }
+                            marks.remove(windowId);
+                        }
+                        if(countMaps.containsKey(windowId)){
+                            countMaps.remove(windowId);
+                        }
                         setState(input, "countMap", countMaps);
-                        marks.remove(windowId);
                     }else{
                         acks.put(windowId, numAcks);
                     }
