@@ -1,6 +1,6 @@
 #*K*-Safe Storm
 
-This repository contains a *k*-safe version of Storm that allows *k* machine failures to have no impact on performance. This was a capstone project for UC Berkeley Master of Engineering program.
+This repository contains a *k*-safe version of Storm that allows up to *k* machine failures without introducing delays in the system. This was a Capstone project for the UC Berkeley Master of Engineering program.
 
 ----------
 
@@ -29,19 +29,25 @@ This repository contains a *k*-safe version of Storm that allows *k* machine fai
 
 ----------
 
+###Cluster setup
+
+The cluster has 8 machines named `storm0[0-7]`, and is set up so that `storm00` runs Ganglia, Zookeeper, and Nimbus, while `storm[1-6]` each runs a Supervisor with 4 slots. `storm07` can be used for miscellaneous testing purposes. The parts that belong to Storm are controlled by `supervisord`, which makes sure to restart the process if it ever crashes. The ssh script connects to `storm00`, which can access all of the 7 other machines.
+
+----------
+
 ###Running an example program
 
 We will run a simple word count topology to test whether *k*-safety is working. The topology looks like the following figure:
 ```
 Figure 1. A simple topology
 
-       /--- bolt1 ---\
-      /               \
-spout                  bolt2
-      \               /
-       \--- bolt1 ---/
+       /--- bolt1-1 ---\
+      /                 \
+spout                    bolt2
+      \                 /
+       \--- bolt1-2 ---/
 ```
-With this topology, we can test *k*-safety with *k*=1. That is, if we shut down one of the two `bolt1`s, the topology should still be running normally because *k*=1 should tolerate one machine failure. The source (`spout`) and the final node (`bolt2`) are single points of failure. However, they can be made *k*-safe too. For the sake of this discussion, we assume that they are always up to make this tutorial simpler.
+With this topology, we can test *k*-safety with *k*=1. That is, if we shut down one of the two `bolt1`'s, the topology should still be running normally because *k*=1 should tolerate one machine failure. The source (`spout`) and the final node (`bolt2`) are single points of failure. However, they can be made *k*-safe too. For the sake of this discussion, we assume that they are always up to make this tutorial simpler.
 
 1. First, SSH to the cluster:
     ```
@@ -77,7 +83,7 @@ With this topology, we can test *k*-safety with *k*=1. That is, if we shut down 
     loc
     ```
     > **Note:**
-    > `loc` is a script that we made to help us find spouts and bolts
+    > `loc` is a script that we made to help us find the machines where spout and bolt tasks are located
 
 5. We are interested in `bolt2`, so if for example `bolt2` is located in `storm02`, then we need to SSH to `storm02`. For the purpose of this tutorial, let's assume that `bolt2` is in `storm02`. We now need to SSH to `storm02`:
     ```
@@ -101,17 +107,15 @@ With this topology, we can test *k*-safety with *k*=1. That is, if we shut down 
 
 7. Now, locate the machines that contain `bolt1` using `loc` again. You can shut down one of these machines, and the output should not change. It shows that *k*-safety is working correctly. Awesome!
 
-8. You can repeat this experiment with *k*=0, and you can see that the output will no longer be correct if you shut down a machine.
-
 
 ----------
 
-###Running the benchmark
->**TODO:** Explain how to change the scheduler to MyCombinedScheduler. Probably give this scheduler a better name as well.
+###Running a benchmark
 
 1. SSH to `storm00` and go to the home directory.
-2. We have provided a script to conveniently run the benchmark. To use the script, use this command:
+2. We have provided a script to conveniently run benchmarks. To use the script, use this command:
     ```
+    cd ~
     ./benchmark.sh <class name> <topology name> <topology arguments ...>
     ```
     - `<class name>`: the system that we want to benchmark. It should be one of these three:
@@ -119,15 +123,15 @@ With this topology, we can test *k*-safety with *k*=1. That is, if we shut down 
         - `storm.starter.BenchmarkStormWithAcking`
         - `storm.starter.BenchmarkStormWithoutAcking`
     
-    - `<topology name>`: the name of the topology to display in the Storm UI. If the topology name is `storm`, our scheduler will switch back to the Storm default scheduler.
+    - `<topology name>`: the name of the topology to display in the Storm UI.
     - `<topology arguments ...>`: the arguments that will be used to structure the topology.
         - For `BenchmarkKsafe`, the first argument is *k*, the rest is topology structure.
-        - For `BenchmarkStormWithAcking` and `BenchmarkStormWithoutAcking`, all arguments are the topology structure.
+        - For `BenchmarkStormWithAcking` and `BenchmarkStormWithoutAcking`, arguments only define the topology structure.
 
         For example, to run `BenchmarkKsafe` with the topology pictured in Figure 1 above and *k*=1, run this command:
         ```
         ./benchmark.sh storm.starter.BenchmarkKsafe ksafe 1 1 2 1
         ```
-    The first argument is `1` to set *k*=1, the rest is `1 2 1`, which says we want 1 spout, 2 middle bolts, and 1 final bolt.
+    The first argument is `1` to set *k*=1, the rest is `1 2 1`, which says we want 1 spout task, 2 middle bolt tasks, and 1 final bolt task.
     > **Note:**
-    > We can make the topology as long as we want. For example, the argument `2 2 4 5 6 2 1` is also valid.
+    > We can make the topology as long as we want. For example, the argument `1 2 4 4 4 2` is also valid.
