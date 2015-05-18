@@ -1,0 +1,26 @@
+#!/usr/bin/python
+
+import urllib2
+import json
+
+PREFIX = "http://localhost:8080/api/v1/topology/"
+
+storm_summary = json.loads(urllib2.urlopen(PREFIX + "summary").read())
+
+for topology in storm_summary['topologies']:
+    encodedId = topology['encodedId']
+    print encodedId
+    summary = json.loads(urllib2.urlopen(PREFIX + encodedId).read())
+    for spout in summary['spouts']:
+        spoutId = spout['spoutId']
+        print spoutId
+        spout_summary = json.loads(urllib2.urlopen(PREFIX + encodedId + "/component/" + spoutId).read())
+        for executor in spout_summary['executorStats']:
+            print '\t', executor['host'], ':', executor['port']
+    for bolt in summary['bolts']:
+        boltId = bolt['boltId']
+        print boltId
+        bolt_summary = json.loads(urllib2.urlopen(PREFIX + encodedId + "/component/" + boltId).read())
+        for executor in bolt_summary['executorStats']:
+            print '\t', executor['host'], ':', executor['port']
+

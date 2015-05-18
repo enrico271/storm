@@ -1,0 +1,30 @@
+cd ~
+tar -zxvf apache-storm-0.9.4.tar.gz
+
+service supervisord restart
+
+# storm01
+scp apache-storm-0.9.4.tar.gz storm01:~
+ssh storm01 'tar -zxvf apache-storm-0.9.4.tar.gz; service supervisord restart; exit'
+
+# storm02
+scp apache-storm-0.9.4.tar.gz storm02:~
+ssh storm02 'tar -zxvf apache-storm-0.9.4.tar.gz; service supervisord restart; exit'
+
+# storm03
+scp apache-storm-0.9.4.tar.gz storm03:~
+ssh storm03 'tar -zxvf apache-storm-0.9.4.tar.gz; service supervisord restart; exit'
+
+# storm04
+scp apache-storm-0.9.4.tar.gz storm04:~
+ssh storm04 'tar -zxvf apache-storm-0.9.4.tar.gz; service supervisord restart; exit'
+
+# storm05
+scp apache-storm-0.9.4.tar.gz storm05:~
+ssh storm05 'tar -zxvf apache-storm-0.9.4.tar.gz; service supervisord restart; exit'
+
+# storm06
+scp apache-storm-0.9.4.tar.gz storm06:~
+ssh storm06 'tar -zxvf apache-storm-0.9.4.tar.gz; service supervisord restart; exit'
+
+cd -
